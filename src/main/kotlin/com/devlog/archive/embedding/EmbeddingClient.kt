@@ -4,6 +4,7 @@ import com.devlog.archive.config.OpenAiProperties
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
@@ -18,6 +19,10 @@ class EmbeddingClient(private val props: OpenAiProperties) {
     private val restClient = RestClient.builder()
         .baseUrl(props.baseUrl)
         .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+        .requestFactory(SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(5_000)
+            setReadTimeout(10_000)
+        })
         .build()
 
     @Retryable(
