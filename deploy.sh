@@ -4,6 +4,7 @@
 set -euo pipefail
 
 NEW_IMAGE=$1
+export ECR_IMAGE="$NEW_IMAGE"
 APP_DIR=/home/ec2-user/app
 COMPOSE_FILE=docker-compose-prod.yml
 ENV_FILE=$APP_DIR/.env.prod
@@ -100,7 +101,11 @@ write_env_file
 # DB 먼저 기동 (없으면 최초 실행)
 if ! docker inspect devlog-postgres >/dev/null 2>&1; then
   echo "Bootstrap: starting database..."
-  "${COMPOSE[@]}" up -d db
+  "${COMPOSE[@]}" up -d db 2>&1 || {
+    echo "DB start failed:"
+    "${COMPOSE[@]}" logs db 2>&1 || true
+    exit 1
+  }
   echo "Waiting for DB to be ready..."
   sleep 15
 fi
