@@ -23,15 +23,19 @@ class RssFeedParser {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    // 피드 fetch/파싱 실패 시 예외를 그대로 던져 호출자가 FAIL로 기록하게 함
+    // 개별 항목 파싱 실패만 스킵 (부분 성공 허용)
     fun parse(rssUrl: String): List<ParsedArticle> {
-        return try {
-            val content = fetchContent(rssUrl)
-            val sanitized = sanitizeXml(content)
-            val feed = SyndFeedInput().build(InputSource(StringReader(sanitized)))
-            feed.entries.mapNotNull { it.toParsedArticle() }
-        } catch (e: Exception) {
-            log.warn("RSS 파싱 실패: url={}, error={}", rssUrl, e.message)
-            emptyList()
+        val content = fetchContent(rssUrl)
+        val sanitized = sanitizeXml(content)
+        val feed = SyndFeedInput().build(InputSource(StringReader(sanitized)))
+        return feed.entries.mapNotNull { entry ->
+            try {
+                entry.toParsedArticle()
+            } catch (e: Exception) {
+                log.warn("항목 파싱 실패: url={}, error={}", rssUrl, e.message)
+                null
+            }
         }
     }
 

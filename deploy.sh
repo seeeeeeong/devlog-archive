@@ -15,6 +15,7 @@ required_vars=(
   DB_PASSWORD
   OPENAI_API_KEY
   ALLOWED_ORIGIN
+  ADMIN_API_KEY
 )
 
 if docker compose version >/dev/null 2>&1; then
@@ -75,6 +76,7 @@ write_env_file() {
 DB_PASSWORD=${DB_PASSWORD}
 OPENAI_API_KEY=${OPENAI_API_KEY}
 ALLOWED_ORIGIN=${ALLOWED_ORIGIN}
+ADMIN_API_KEY=${ADMIN_API_KEY}
 EOV
 
   chmod 600 "$ENV_FILE"

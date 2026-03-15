@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
 import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Service
 class CrawlService(
@@ -19,17 +20,25 @@ class CrawlService(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val crawling = AtomicBoolean(false)
 
     fun crawlAll() {
-        val blogs = blogRepository.findAllByActiveTrue()
-        log.info("크롤링 시작: 대상 블로그 {}개", blogs.size)
-
-        blogs.forEach { blog ->
-            try {
-                crawlBlog(blog)
-            } catch (e: Exception) {
-                log.error("블로그 크롤링 실패: company={}, error={}", blog.company, e.message)
+        if (!crawling.compareAndSet(false, true)) {
+            log.warn("크롤링이 이미 실행 중입니다. 건너뜀.")
+            return
+        }
+        try {
+            val blogs = blogRepository.findAllByActiveTrue()
+            log.info("크롤링 시작: 대상 블로그 {}개", blogs.size)
+            blogs.forEach { blog ->
+                try {
+                    crawlBlog(blog)
+                } catch (e: Exception) {
+                    log.error("블로그 크롤링 실패: company={}, error={}", blog.company, e.message)
+                }
             }
+        } finally {
+            crawling.set(false)
         }
     }
 

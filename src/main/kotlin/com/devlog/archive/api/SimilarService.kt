@@ -18,7 +18,7 @@ class SimilarService(
     private val log = LoggerFactory.getLogger(javaClass)
     private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
-    @Cacheable(cacheNames = ["similar"], key = "#root.target.cacheKey(#request.title, #request.content)")
+    @Cacheable(cacheNames = ["similar"], key = "#root.target.cacheKey(#request.title, #request.content, #request.topK)")
     fun findSimilar(request: SimilarRequest): SimilarResponse {
         log.debug("유사글 검색: title={}", request.title)
 
@@ -52,8 +52,8 @@ class SimilarService(
         return SimilarResponse(items = result)
     }
 
-    fun cacheKey(title: String, content: String): String {
-        val input = "$title::${content.take(500)}"
+    fun cacheKey(title: String, content: String, topK: Int): String {
+        val input = "$title::${content.take(2000)}::$topK"
         return MessageDigest.getInstance("SHA-256")
             .digest(input.toByteArray())
             .joinToString("") { "%02x".format(it) }
