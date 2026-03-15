@@ -1,0 +1,17 @@
+# 운영 환경 전용 설정
+# 비밀값은 SSM Parameter Store에서 주입 (deploy.sh 참고)
+
+spring:
+  datasource:
+    url: jdbc:postgresql://db:5432/devlog_archive
+    username: devlog
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+cors:
+  allowed-origin: ${ALLOWED_ORIGIN}
+
+logging:
+  level:
+    com.devlog.archive: INFO
+    root: WARN

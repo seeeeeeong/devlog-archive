@@ -1,9 +1,9 @@
 package com.devlog.archive.api
 
+import com.devlog.archive.config.AdminProperties
 import com.devlog.archive.crawler.CrawlService
 import com.devlog.archive.storage.ArticleRepository
 import com.devlog.archive.storage.BlogRepository
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -19,13 +19,13 @@ class AdminController(
     private val crawlService: CrawlService,
     private val blogRepository: BlogRepository,
     private val articleRepository: ArticleRepository,
-    @Value("\${admin.api-key}") private val adminApiKey: String,
+    private val admin: AdminProperties,
 ) {
     @PostMapping("/admin/crawl")
     fun triggerCrawl(
         @RequestHeader("X-Admin-Key", required = false) key: String?,
     ): ResponseEntity<Map<String, String>> {
-        if (key != adminApiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (key != admin.apiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         Thread { crawlService.crawlAll() }.start()
         return ResponseEntity.ok(mapOf("message" to "크롤링 시작됨"))
     }
@@ -34,7 +34,7 @@ class AdminController(
     fun listBlogs(
         @RequestHeader("X-Admin-Key", required = false) key: String?,
     ): ResponseEntity<Any> {
-        if (key != adminApiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (key != admin.apiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         val blogs = blogRepository.findAllByActiveTrue()
         return ResponseEntity.ok(blogs.map {
             mapOf("id" to it.id, "company" to it.company, "name" to it.name)
@@ -45,7 +45,7 @@ class AdminController(
     fun listArticles(
         @RequestHeader("X-Admin-Key", required = false) key: String?,
     ): ResponseEntity<Any> {
-        if (key != adminApiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (key != admin.apiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         val articles = articleRepository.findAll(PageRequest.of(0, 20))
         return ResponseEntity.ok(mapOf(
             "total" to articles.totalElements,

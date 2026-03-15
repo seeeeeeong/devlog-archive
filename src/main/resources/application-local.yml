@@ -1,0 +1,18 @@
+# 로컬 개발 전용 설정
+# 비밀값(OPENAI_API_KEY, DB_PASSWORD, ADMIN_API_KEY)은 환경변수로 주입
+# IDE: Run Configuration > Environment variables 에서 설정
+# CLI: export OPENAI_API_KEY=... && ./gradlew bootRun
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/devlog_archive
+    username: devlog
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+cors:
+  allowed-origin: http://localhost:5173
+
+logging:
+  level:
+    com.devlog.archive: DEBUG

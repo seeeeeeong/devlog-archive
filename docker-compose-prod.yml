@@ -20,10 +20,7 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=devlog_archive
-      - DB_USERNAME=devlog
+      - SPRING_PROFILES_ACTIVE=prod
       - DB_PASSWORD=${DB_PASSWORD}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_EMBEDDING_MODEL=text-embedding-3-small

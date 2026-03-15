@@ -10,7 +10,6 @@ plugins {
     kotlin("plugin.jpa") version "2.3.0"
     id("org.springframework.boot") version "3.5.9"
     id("io.spring.dependency-management") version "1.1.7"
-    id("co.uzzu.dotenv.gradle") version "2.0.0"
 }
 
 group = "com.devlog"
@@ -57,6 +56,9 @@ dependencies {
     // Prometheus
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
+    // Configuration Properties 메타데이터 (IDE 자동완성)
+    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
@@ -81,6 +83,8 @@ tasks.named<Jar>("jar") {
     enabled = false
 }
 
+// 로컬 실행 시 local 프로파일 활성화
+// 비밀값은 환경변수로 주입: export OPENAI_API_KEY=... DB_PASSWORD=... ADMIN_API_KEY=...
 tasks.named<BootRun>("bootRun") {
-    environment(env.allVariables)
+    args("--spring.profiles.active=local")
 }
