@@ -1,4 +1,4 @@
-package com.devlog.archive.api
+package com.devlog.archive.similar
 
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max

@@ -1,4 +1,4 @@
-package com.devlog.archive.storage
+package com.devlog.archive.blog
 
 import jakarta.persistence.*
 import java.time.LocalDateTime

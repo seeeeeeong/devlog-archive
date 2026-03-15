@@ -1,4 +1,4 @@
-package com.devlog.archive.storage
+package com.devlog.archive.blog
 
 import org.springframework.data.jpa.repository.JpaRepository
 

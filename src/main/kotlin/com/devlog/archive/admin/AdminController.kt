@@ -1,9 +1,9 @@
-package com.devlog.archive.api
+package com.devlog.archive.admin
 
+import com.devlog.archive.article.ArticleRepository
+import com.devlog.archive.blog.BlogRepository
 import com.devlog.archive.config.AdminProperties
-import com.devlog.archive.crawler.CrawlService
-import com.devlog.archive.storage.ArticleRepository
-import com.devlog.archive.storage.BlogRepository
+import com.devlog.archive.crawl.CrawlService
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -26,7 +26,7 @@ class AdminController(
         @RequestHeader("X-Admin-Key", required = false) key: String?,
     ): ResponseEntity<Map<String, String>> {
         if (key != admin.apiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
-        Thread { crawlService.crawlAll() }.start()
+        crawlService.crawlAllAsync()
         return ResponseEntity.ok(mapOf("message" to "크롤링 시작됨"))
     }
 

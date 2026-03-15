@@ -1,5 +1,6 @@
-package com.devlog.archive.storage
+package com.devlog.archive.article
 
+import com.devlog.archive.blog.BlogEntity
 import jakarta.persistence.*
 import java.time.LocalDateTime
 

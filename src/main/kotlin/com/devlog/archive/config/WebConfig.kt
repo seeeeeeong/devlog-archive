@@ -1,6 +1,5 @@
-package com.devlog.archive.core
+package com.devlog.archive.config
 
-import com.devlog.archive.config.CorsProperties
 import org.springframework.context.annotation.Configuration
 import org.springframework.web.servlet.config.annotation.CorsRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer

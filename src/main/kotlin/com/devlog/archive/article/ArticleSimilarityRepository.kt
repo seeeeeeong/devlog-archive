@@ -1,16 +1,11 @@
-package com.devlog.archive.storage
+package com.devlog.archive.article
 
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
-import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.Repository
 import org.springframework.data.repository.query.Param
+import java.time.LocalDateTime
 
-interface ArticleRepository : JpaRepository<ArticleEntity, Long> {
-
-    fun existsByUrlHash(urlHash: String): Boolean
-
-    fun findAllByBlogCompany(company: String, pageable: Pageable): Page<ArticleEntity>
+interface ArticleSimilarityRepository : Repository<ArticleEntity, Long> {
 
     @Query(
         value = """
@@ -34,7 +29,7 @@ interface SimilarArticleRow {
     val title: String
     val url: String
     val summary: String?
-    val publishedAt: java.time.LocalDateTime?
+    val publishedAt: LocalDateTime?
     val similarity: Double
     val blogId: Long
 }

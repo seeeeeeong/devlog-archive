@@ -1,8 +1,8 @@
-package com.devlog.archive.api
+package com.devlog.archive.similar
 
-import com.devlog.archive.core.EmbeddingClient
-import com.devlog.archive.storage.ArticleRepository
-import com.devlog.archive.storage.BlogRepository
+import com.devlog.archive.article.ArticleSimilarityRepository
+import com.devlog.archive.blog.BlogCacheService
+import com.devlog.archive.embedding.EmbeddingClient
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
@@ -11,8 +11,8 @@ import java.time.format.DateTimeFormatter
 
 @Service
 class SimilarService(
-    private val articleRepository: ArticleRepository,
-    private val blogRepository: BlogRepository,
+    private val articleSimilarityRepository: ArticleSimilarityRepository,
+    private val blogCacheService: BlogCacheService,
     private val embeddingClient: EmbeddingClient,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -26,13 +26,11 @@ class SimilarService(
         val embedding = embeddingClient.embed(queryText)
         val vectorLiteral = embedding.joinToString(",", "[", "]")
 
-        val candidates = articleRepository.findSimilar(vectorLiteral, request.topK * 3)
+        val candidates = articleSimilarityRepository.findSimilar(vectorLiteral, request.topK * 3)
         log.debug("유사글 후보: {}개, 첫 번째 유사도={}", candidates.size, candidates.firstOrNull()?.similarity)
 
-        // 블로그 ID → 회사명 매핑
-        val blogMap = blogRepository.findAll().associate { it.id to it.company }
+        val blogMap = blogCacheService.findAll().associate { it.id to it.company }
 
-        // 유사도 0.4 이상만 반환 (관련도 낮은 글 제외)
         val result = candidates
             .filter { it.similarity >= 0.4 }
             .mapNotNull { row ->

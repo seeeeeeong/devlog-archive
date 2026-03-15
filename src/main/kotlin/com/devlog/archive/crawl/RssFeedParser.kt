@@ -1,15 +1,15 @@
-package com.devlog.archive.crawler
+package com.devlog.archive.crawl
 
 import com.rometools.rome.feed.synd.SyndEntry
 import com.rometools.rome.io.SyndFeedInput
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import org.xml.sax.InputSource
 import java.io.StringReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDateTime
 import java.time.ZoneId
-import org.xml.sax.InputSource
 
 data class ParsedArticle(
     val title: String,

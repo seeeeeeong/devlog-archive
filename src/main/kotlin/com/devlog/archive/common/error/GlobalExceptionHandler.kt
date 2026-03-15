@@ -1,4 +1,4 @@
-package com.devlog.archive.core
+package com.devlog.archive.common.error
 
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus

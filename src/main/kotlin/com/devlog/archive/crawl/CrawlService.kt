@@ -1,0 +1,78 @@
+package com.devlog.archive.crawl
+
+import com.devlog.archive.article.ArticleEmbeddingRepository
+import com.devlog.archive.blog.BlogEntity
+import com.devlog.archive.blog.BlogRepository
+import com.devlog.archive.embedding.EmbeddingClient
+import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Async
+import org.springframework.stereotype.Service
+import java.util.concurrent.atomic.AtomicBoolean
+
+@Service
+class CrawlService(
+    private val blogRepository: BlogRepository,
+    private val articleStoreService: ArticleStoreService,
+    private val rssFeedParser: RssFeedParser,
+    private val embeddingClient: EmbeddingClient,
+    private val articleEmbeddingRepository: ArticleEmbeddingRepository,
+) {
+    private val log = LoggerFactory.getLogger(javaClass)
+    private val crawling = AtomicBoolean(false)
+
+    @Async
+    fun crawlAllAsync() = crawlAll()
+
+    fun crawlAll() {
+        if (!crawling.compareAndSet(false, true)) {
+            log.warn("크롤링이 이미 실행 중입니다. 건너뜀.")
+            return
+        }
+        try {
+            val blogs = blogRepository.findAllByActiveTrue()
+            log.info("크롤링 시작: 대상 블로그 {}개", blogs.size)
+            blogs.forEach { blog ->
+                try {
+                    crawlBlog(blog)
+                } catch (e: Exception) {
+                    log.error("블로그 크롤링 실패: company={}, error={}", blog.company, e.message)
+                }
+            }
+        } finally {
+            crawling.set(false)
+        }
+    }
+
+    fun crawlBlog(blog: BlogEntity) {
+        val crawlLog = articleStoreService.startLog(blog)
+        var newCount = 0
+        var status = "SUCCESS"
+        var message: String? = null
+
+        try {
+            val parsedArticles = rssFeedParser.parse(blog.rssUrl)
+            log.info("RSS 파싱 완료: company={}, count={}", blog.company, parsedArticles.size)
+
+            parsedArticles.forEach { parsed ->
+                val article = articleStoreService.saveArticleIfNew(blog, parsed) ?: return@forEach
+                newCount++
+
+                try {
+                    val text = "${article.title} ${parsed.summary ?: ""}".trim()
+                    val vector = embeddingClient.embed(text)
+                    articleEmbeddingRepository.save(article.id, vector)
+                } catch (e: Exception) {
+                    log.warn("임베딩 저장 실패: articleId={}, error={}", article.id, e.message)
+                }
+            }
+        } catch (e: Exception) {
+            status = "FAIL"
+            message = e.message
+            log.error("크롤링 실패: company={}, error={}", blog.company, e.message)
+        } finally {
+            articleStoreService.finishLog(crawlLog, newCount, status, message)
+        }
+
+        log.info("크롤링 완료: company={}, status={}, newCount={}", blog.company, status, newCount)
+    }
+}

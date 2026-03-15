@@ -53,6 +53,10 @@ dependencies {
     // RSS Parser
     implementation("com.rometools:rome:2.1.0")
 
+    // Retry
+    implementation("org.springframework.retry:spring-retry")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
+
     // Prometheus
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 

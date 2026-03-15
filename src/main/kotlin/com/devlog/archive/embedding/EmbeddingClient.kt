@@ -1,10 +1,14 @@
-package com.devlog.archive.core
+package com.devlog.archive.embedding
 
 import com.devlog.archive.config.OpenAiProperties
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.retry.annotation.Backoff
+import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
+import org.springframework.web.client.HttpServerErrorException
+import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 
 @Component
@@ -16,6 +20,11 @@ class EmbeddingClient(private val props: OpenAiProperties) {
         .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
         .build()
 
+    @Retryable(
+        retryFor = [HttpServerErrorException::class, ResourceAccessException::class],
+        maxAttempts = 3,
+        backoff = Backoff(delay = 1000, multiplier = 2.0),
+    )
     fun embed(text: String): List<Double> {
         val truncated = text.take(8000)
         log.debug("임베딩 생성 요청: textLength={}", truncated.length)
