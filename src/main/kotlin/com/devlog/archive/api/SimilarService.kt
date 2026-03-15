@@ -22,27 +22,21 @@ class SimilarService(
     fun findSimilar(request: SimilarRequest): SimilarResponse {
         log.debug("유사글 검색: title={}", request.title)
 
-        val queryText = "${request.title} ${request.content.take(1000)}".trim()
+        val queryText = "${request.title} ${request.content.take(2000)}".trim()
         val embedding = embeddingClient.embed(queryText)
         val vectorLiteral = embedding.joinToString(",", "[", "]")
 
-        // 다양성 확보를 위해 topK * 4 만큼 조회 후 후처리
-        val candidates = articleRepository.findSimilar(vectorLiteral, request.topK * 4)
+        val candidates = articleRepository.findSimilar(vectorLiteral, request.topK * 3)
         log.debug("유사글 후보: {}개, 첫 번째 유사도={}", candidates.size, candidates.firstOrNull()?.similarity)
 
         // 블로그 ID → 회사명 매핑
         val blogMap = blogRepository.findAll().associate { it.id to it.company }
 
-        // 동일 회사 최대 2개 제한
-        val companyCount = mutableMapOf<String, Int>()
+        // 유사도 0.4 이상만 반환 (관련도 낮은 글 제외)
         val result = candidates
-            .filter { it.similarity >= 0.3 }  // 임계치 완화
+            .filter { it.similarity >= 0.4 }
             .mapNotNull { row ->
                 val company = blogMap[row.blogId] ?: return@mapNotNull null
-                val count = companyCount.getOrDefault(company, 0)
-                if (count >= 2) return@mapNotNull null
-                companyCount[company] = count + 1
-
                 SimilarArticleDto(
                     articleId = row.id,
                     title = row.title,
