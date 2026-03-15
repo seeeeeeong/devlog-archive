@@ -1,0 +1,10 @@
+project_name    = "devlog-archive"
+aws_region      = "ap-northeast-2"
+ec2_instance_type = "t4g.micro"
+github_repo     = "seeeeeeong/devlog-archive"
+domain_name     = "archive.seeeeeeong.com"
+root_domain     = "seeeeeeong.com"
+
+db_password     = "CHANGE_ME"
+openai_api_key  = "sk-proj-CHANGE_ME"
+allowed_origin  = "https://seeeeeeong.com"

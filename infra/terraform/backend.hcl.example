@@ -1,0 +1,5 @@
+bucket         = "blog-terraform-state-597035314324"
+key            = "devlog-archive/terraform.tfstate"
+region         = "ap-northeast-2"
+dynamodb_table = "terraform-state-lock"
+encrypt        = true

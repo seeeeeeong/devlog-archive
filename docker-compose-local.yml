@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: devlog-postgres
+    environment:
+      POSTGRES_DB: devlog_archive
+      POSTGRES_USER: devlog
+      POSTGRES_PASSWORD: devlog1234
+    ports:
+      - "5433:5432"
+    volumes:
+      - devlog-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devlog -d devlog_archive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  devlog-postgres-data:
