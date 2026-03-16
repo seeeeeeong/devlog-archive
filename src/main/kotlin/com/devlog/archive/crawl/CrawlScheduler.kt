@@ -10,7 +10,7 @@ class CrawlScheduler(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @Scheduled(fixedDelay = 3_600_000)  // 1시간
+    @Scheduled(cron = "0 0 3 * * MON")  // 매주 월요일 새벽 3시
     fun scheduleCrawl() {
         log.info("정기 크롤링 시작")
         crawlService.crawlAll()
