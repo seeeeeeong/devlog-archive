@@ -36,13 +36,14 @@ class EmbeddingClient(private val props: OpenAiProperties) {
 
         val response = restClient.post()
             .uri("/v1/embeddings")
-            .header(HttpHeaders.AUTHORIZATION, "Bearer ${props.apiKey}")
+            .header(HttpHeaders.AUTHORIZATION, "Bearer ${props.apiKey.trim()}")
             .body(EmbeddingRequest(model = props.embeddingModel, input = truncated))
             .retrieve()
             .body(EmbeddingResponse::class.java)
             ?: throw IllegalStateException("OpenAI 응답이 비어있습니다")
 
-        return response.data.first().embedding
+        return response.data.firstOrNull()?.embedding
+            ?: throw IllegalStateException("OpenAI 임베딩 응답에 data가 없습니다")
     }
 }
 

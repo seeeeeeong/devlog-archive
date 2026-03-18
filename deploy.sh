@@ -115,7 +115,7 @@ fi
 # 새 이미지로 앱 재시작
 APP_UP_LOG=/tmp/deploy-app-up.log
 set +e
-ECR_IMAGE="$NEW_IMAGE" "${COMPOSE[@]}" up -d --no-deps app >"$APP_UP_LOG" 2>&1
+ECR_IMAGE="$NEW_IMAGE" "${COMPOSE[@]}" up -d --no-deps --force-recreate app >"$APP_UP_LOG" 2>&1
 APP_UP_EXIT=$?
 set -e
 
