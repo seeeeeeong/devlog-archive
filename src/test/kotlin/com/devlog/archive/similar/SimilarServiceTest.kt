@@ -119,14 +119,14 @@ class SimilarServiceTest {
                         blogId = 1L,
                         title = "CSS Animation Timing",
                         summary = "animation easing transitions",
-                        similarity = 0.69,
+                        similarity = 0.49,
                     ),
                     row(
                         id = 12L,
                         blogId = 1L,
                         title = "Kubernetes Deployment Strategy",
                         summary = "rolling update probes",
-                        similarity = 0.57,
+                        similarity = 0.47,
                     ),
                 )
             )
@@ -135,6 +135,44 @@ class SimilarServiceTest {
         val result = similarService.findSimilar(request)
 
         assertThat(result.items).isEmpty()
+    }
+
+    @Test
+    fun `returns fallback vector matches when strict rerank is empty`() {
+        val request = SimilarRequest(
+            title = "Terraform AWS Migration",
+            content = "console infrastructure migration and operations",
+            topK = 2,
+        )
+
+        `when`(embeddingClient.embed("Terraform AWS Migration Terraform AWS Migration console infrastructure migration and operations"))
+            .thenReturn(listOf(0.7, 0.8))
+        `when`(articleSimilarityRepository.findSimilar("[0.7,0.8]", 20))
+            .thenReturn(
+                listOf(
+                    row(
+                        id = 21L,
+                        blogId = 1L,
+                        title = "Large Scale Cloud Platform Story",
+                        summary = "infrastructure migration operations reliability",
+                        similarity = 0.63,
+                    ),
+                    row(
+                        id = 22L,
+                        blogId = 1L,
+                        title = "Developer Productivity Metrics",
+                        summary = "engineering process dashboard",
+                        similarity = 0.51,
+                    ),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).hasSize(2)
+        assertThat(result.items.map { it.articleId }).containsExactly(21L, 22L)
+        assertThat(result.items.first().similarity).isGreaterThan(result.items.last().similarity)
     }
 
     private fun row(
