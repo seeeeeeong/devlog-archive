@@ -1,12 +1,15 @@
 package com.devlog.archive.similar
 
 import com.devlog.archive.article.ArticleSimilarityRepository
+import com.devlog.archive.article.LexicalArticleRow
 import com.devlog.archive.article.SimilarArticleRow
 import com.devlog.archive.blog.BlogCacheService
 import com.devlog.archive.blog.BlogEntity
 import com.devlog.archive.embedding.EmbeddingClient
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
@@ -20,11 +23,17 @@ class SimilarServiceTest {
     private val articleSimilarityRepository = mock(ArticleSimilarityRepository::class.java)
     private val blogCacheService = mock(BlogCacheService::class.java)
     private val embeddingClient = mock(EmbeddingClient::class.java)
+    private val meterRegistry = SimpleMeterRegistry()
     private val similarService = SimilarService(
         articleSimilarityRepository,
         blogCacheService,
         embeddingClient,
+        meterRegistry,
     )
+
+    init {
+        `when`(articleSimilarityRepository.findLexicalCandidates(anyInt())).thenReturn(emptyList())
+    }
 
     @Test
     fun `returns empty items when embedding request fails`() {
@@ -170,9 +179,9 @@ class SimilarServiceTest {
 
         val result = similarService.findSimilar(request)
 
-        assertThat(result.items).hasSize(2)
-        assertThat(result.items.map { it.articleId }).containsExactly(21L, 22L)
-        assertThat(result.items.first().similarity).isGreaterThan(result.items.last().similarity)
+        assertThat(result.items).hasSize(1)
+        assertThat(result.items.single().articleId).isEqualTo(21L)
+        assertThat(result.items.single().similarity).isGreaterThan(0.5)
     }
 
     @Test
@@ -213,6 +222,39 @@ class SimilarServiceTest {
         assertThat(result.items.single().similarity).isEqualTo(0.39)
     }
 
+    @Test
+    fun `returns lexical only candidate when topic hints strongly match`() {
+        val request = SimilarRequest(
+            title = "Outbox Pattern Kafka",
+            content = "reliable event delivery for coupon system",
+            topicHints = listOf("Outbox", "Kafka"),
+            topK = 2,
+        )
+
+        `when`(embeddingClient.embed("Outbox Pattern Kafka Outbox Pattern Kafka Outbox Kafka reliable event delivery for coupon system"))
+            .thenReturn(listOf(0.3, 0.4))
+        `when`(articleSimilarityRepository.findSimilar("[0.3,0.4]", 20))
+            .thenReturn(emptyList())
+        `when`(articleSimilarityRepository.findLexicalCandidates(120))
+            .thenReturn(
+                listOf(
+                    lexicalRow(
+                        id = 41L,
+                        blogId = 1L,
+                        title = "Outbox Kafka Messaging at Scale",
+                        summary = "reliable delivery with outbox and kafka",
+                    )
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).hasSize(1)
+        assertThat(result.items.single().articleId).isEqualTo(41L)
+        assertThat(result.items.single().similarity).isGreaterThan(0.5)
+    }
+
     private fun row(
         id: Long,
         blogId: Long,
@@ -236,6 +278,20 @@ class SimilarServiceTest {
         rssUrl = "https://example.com/rss/$id",
         homeUrl = "https://example.com/$id",
     )
+
+    private fun lexicalRow(
+        id: Long,
+        blogId: Long,
+        title: String,
+        summary: String?,
+    ): LexicalArticleRow = TestLexicalArticleRow(
+        id = id,
+        blogId = blogId,
+        title = title,
+        url = "https://example.com/$id",
+        summary = summary,
+        publishedAt = LocalDateTime.of(2026, 3, 18, 10, 0),
+    )
 }
 
 private data class TestSimilarArticleRow(
@@ -247,3 +303,12 @@ private data class TestSimilarArticleRow(
     override val similarity: Double,
     override val blogId: Long,
 ) : SimilarArticleRow
+
+private data class TestLexicalArticleRow(
+    override val id: Long,
+    override val title: String,
+    override val url: String,
+    override val summary: String?,
+    override val publishedAt: LocalDateTime?,
+    override val blogId: Long,
+) : LexicalArticleRow

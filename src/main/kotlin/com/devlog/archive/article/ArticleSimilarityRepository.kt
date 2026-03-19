@@ -22,14 +22,32 @@ interface ArticleSimilarityRepository : Repository<ArticleEntity, Long> {
         @Param("embedding") embedding: String,
         @Param("limit") limit: Int,
     ): List<SimilarArticleRow>
+
+    @Query(
+        value = """
+            SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.published_at, a.crawled_at
+            FROM articles a
+            ORDER BY a.published_at DESC NULLS LAST, a.id DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun findLexicalCandidates(
+        @Param("limit") limit: Int,
+    ): List<LexicalArticleRow>
 }
 
-interface SimilarArticleRow {
+interface CandidateArticleRow {
     val id: Long
     val title: String
     val url: String
     val summary: String?
     val publishedAt: LocalDateTime?
-    val similarity: Double
     val blogId: Long
 }
+
+interface SimilarArticleRow : CandidateArticleRow {
+    val similarity: Double
+}
+
+interface LexicalArticleRow : CandidateArticleRow
