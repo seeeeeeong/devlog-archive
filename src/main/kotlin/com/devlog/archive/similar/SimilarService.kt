@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClientException
 import java.security.MessageDigest
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
+import kotlin.math.min
 
 @Service
 class SimilarService(
@@ -29,6 +30,7 @@ class SimilarService(
     private val minimumFinalScore = 0.52
     private val fallbackVectorSimilarity = 0.44
     private val fallbackFinalScore = 0.42
+    private val lastResortVectorSimilarity = 0.37
     private val stopWords = setOf(
         "the", "and", "for", "with", "from", "that", "this", "into", "about", "have", "has",
         "how", "what", "when", "where", "will", "your", "post", "blog", "code", "using", "use",
@@ -82,12 +84,29 @@ class SimilarService(
                 candidates.size,
                 candidates.firstOrNull()?.similarity,
             )
-            candidates.toRankedCandidates(
+            val fallbackResult = candidates.toRankedCandidates(
                 scorer = { row -> scoreFallbackCandidate(row, queryTitleTokens, queryAllTokens) },
                 minimumScore = fallbackFinalScore,
                 blogMap = blogMap,
                 topK = request.topK,
             )
+
+            if (fallbackResult.isNotEmpty()) {
+                fallbackResult
+            } else {
+                log.info(
+                    "유사글 fallback도 결과 없음, last resort 적용: title={}, candidates={}, topVector={}",
+                    request.title,
+                    candidates.size,
+                    candidates.firstOrNull()?.similarity,
+                )
+                candidates.toRankedCandidates(
+                    scorer = { row -> RankedCandidate(row = row, score = row.similarity) },
+                    minimumScore = lastResortVectorSimilarity,
+                    blogMap = blogMap,
+                    topK = min(request.topK, 1),
+                )
+            }
         }
 
         return SimilarResponse(items = result)

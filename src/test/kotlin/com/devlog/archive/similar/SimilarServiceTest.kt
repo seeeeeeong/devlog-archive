@@ -119,14 +119,14 @@ class SimilarServiceTest {
                         blogId = 1L,
                         title = "CSS Animation Timing",
                         summary = "animation easing transitions",
-                        similarity = 0.49,
+                        similarity = 0.29,
                     ),
                     row(
                         id = 12L,
                         blogId = 1L,
                         title = "Kubernetes Deployment Strategy",
                         summary = "rolling update probes",
-                        similarity = 0.47,
+                        similarity = 0.27,
                     ),
                 )
             )
@@ -173,6 +173,44 @@ class SimilarServiceTest {
         assertThat(result.items).hasSize(2)
         assertThat(result.items.map { it.articleId }).containsExactly(21L, 22L)
         assertThat(result.items.first().similarity).isGreaterThan(result.items.last().similarity)
+    }
+
+    @Test
+    fun `returns top vector match as last resort when fallback is still empty`() {
+        val request = SimilarRequest(
+            title = "Kafka Consumer Idempotency",
+            content = "consumer deduplication and final confirmation",
+            topK = 3,
+        )
+
+        `when`(embeddingClient.embed("Kafka Consumer Idempotency Kafka Consumer Idempotency consumer deduplication and final confirmation"))
+            .thenReturn(listOf(0.9, 1.0))
+        `when`(articleSimilarityRepository.findSimilar("[0.9,1.0]", 30))
+            .thenReturn(
+                listOf(
+                    row(
+                        id = 31L,
+                        blogId = 1L,
+                        title = "Messaging Platform Overview",
+                        summary = "distributed stream processing architecture",
+                        similarity = 0.39,
+                    ),
+                    row(
+                        id = 32L,
+                        blogId = 1L,
+                        title = "Frontend Bundle Optimization",
+                        summary = "code split asset pipeline",
+                        similarity = 0.34,
+                    ),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).hasSize(1)
+        assertThat(result.items.single().articleId).isEqualTo(31L)
+        assertThat(result.items.single().similarity).isEqualTo(0.39)
     }
 
     private fun row(
