@@ -9,7 +9,7 @@ interface ArticleSimilarityRepository : Repository<ArticleEntity, Long> {
 
     @Query(
         value = """
-            SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.published_at, a.crawled_at,
+            SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.topic_hints, a.published_at, a.crawled_at,
                    1 - (ae.embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM articles a
             JOIN article_embeddings ae ON a.id = ae.article_id
@@ -25,7 +25,7 @@ interface ArticleSimilarityRepository : Repository<ArticleEntity, Long> {
 
     @Query(
         value = """
-            SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.published_at, a.crawled_at
+            SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.topic_hints, a.published_at, a.crawled_at
             FROM articles a
             ORDER BY a.published_at DESC NULLS LAST, a.id DESC
             LIMIT :limit
@@ -42,6 +42,7 @@ interface CandidateArticleRow {
     val title: String
     val url: String
     val summary: String?
+    val topicHints: String?
     val publishedAt: LocalDateTime?
     val blogId: Long
 }

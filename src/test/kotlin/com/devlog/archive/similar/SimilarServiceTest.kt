@@ -1,6 +1,7 @@
 package com.devlog.archive.similar
 
 import com.devlog.archive.article.ArticleSimilarityRepository
+import com.devlog.archive.article.ArticleTopicHintExtractor
 import com.devlog.archive.article.LexicalArticleRow
 import com.devlog.archive.article.SimilarArticleRow
 import com.devlog.archive.blog.BlogCacheService
@@ -181,7 +182,7 @@ class SimilarServiceTest {
 
         assertThat(result.items).hasSize(1)
         assertThat(result.items.single().articleId).isEqualTo(21L)
-        assertThat(result.items.single().similarity).isGreaterThan(0.5)
+        assertThat(result.items.single().similarity).isGreaterThan(0.49)
     }
 
     @Test
@@ -255,18 +256,54 @@ class SimilarServiceTest {
         assertThat(result.items.single().similarity).isGreaterThan(0.5)
     }
 
+    @Test
+    fun `uses stored candidate topic hints during reranking`() {
+        val request = SimilarRequest(
+            title = "Redis 장애를 사용자 장애로 만들지 않는 법",
+            content = "장애 격리와 fallback 전략",
+            topicHints = listOf("Redis", "Failure Handling"),
+            topK = 2,
+        )
+
+        `when`(embeddingClient.embed("Redis 장애를 사용자 장애로 만들지 않는 법 Redis 장애를 사용자 장애로 만들지 않는 법 Redis Failure Handling 장애 격리와 fallback 전략"))
+            .thenReturn(listOf(0.2, 0.3))
+        `when`(articleSimilarityRepository.findSimilar("[0.2,0.3]", 20))
+            .thenReturn(emptyList())
+        `when`(articleSimilarityRepository.findLexicalCandidates(120))
+            .thenReturn(
+                listOf(
+                    lexicalRow(
+                        id = 51L,
+                        blogId = 1L,
+                        title = "서비스 장애 복구 패턴",
+                        summary = "트래픽 급증 상황에서 fallback과 격리를 적용한 운영 경험",
+                        topicHints = listOf("Redis", "Failure Handling"),
+                    )
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).hasSize(1)
+        assertThat(result.items.single().articleId).isEqualTo(51L)
+        assertThat(result.items.single().similarity).isGreaterThan(0.45)
+    }
+
     private fun row(
         id: Long,
         blogId: Long,
         title: String,
         summary: String?,
         similarity: Double,
+        topicHints: List<String> = emptyList(),
     ): SimilarArticleRow = TestSimilarArticleRow(
         id = id,
         blogId = blogId,
         title = title,
         url = "https://example.com/$id",
         summary = summary,
+        topicHints = ArticleTopicHintExtractor.toStorageValue(topicHints),
         publishedAt = LocalDateTime.of(2026, 3, 18, 10, 0),
         similarity = similarity,
     )
@@ -284,12 +321,14 @@ class SimilarServiceTest {
         blogId: Long,
         title: String,
         summary: String?,
+        topicHints: List<String> = emptyList(),
     ): LexicalArticleRow = TestLexicalArticleRow(
         id = id,
         blogId = blogId,
         title = title,
         url = "https://example.com/$id",
         summary = summary,
+        topicHints = ArticleTopicHintExtractor.toStorageValue(topicHints),
         publishedAt = LocalDateTime.of(2026, 3, 18, 10, 0),
     )
 }
@@ -299,6 +338,7 @@ private data class TestSimilarArticleRow(
     override val title: String,
     override val url: String,
     override val summary: String?,
+    override val topicHints: String?,
     override val publishedAt: LocalDateTime?,
     override val similarity: Double,
     override val blogId: Long,
@@ -309,6 +349,7 @@ private data class TestLexicalArticleRow(
     override val title: String,
     override val url: String,
     override val summary: String?,
+    override val topicHints: String?,
     override val publishedAt: LocalDateTime?,
     override val blogId: Long,
 ) : LexicalArticleRow

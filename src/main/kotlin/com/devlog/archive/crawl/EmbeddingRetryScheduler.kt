@@ -2,6 +2,7 @@ package com.devlog.archive.crawl
 
 import com.devlog.archive.article.ArticleEmbeddingRepository
 import com.devlog.archive.article.ArticleRepository
+import com.devlog.archive.article.ArticleTopicHintExtractor
 import com.devlog.archive.embedding.EmbeddingClient
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -25,7 +26,9 @@ class EmbeddingRetryScheduler(
 
         articles.forEach { article ->
             try {
-                val text = "${article.title} ${article.summary ?: ""}".trim()
+                val topicHints = ArticleTopicHintExtractor.fromStorageValue(article.topicHints)
+                    .ifEmpty { ArticleTopicHintExtractor.extract(article.title, article.summary) }
+                val text = ArticleTopicHintExtractor.buildEmbeddingText(article.title, article.summary, topicHints)
                 val vector = embeddingClient.embed(text)
                 articleEmbeddingRepository.save(article.id, vector)
                 successCount++

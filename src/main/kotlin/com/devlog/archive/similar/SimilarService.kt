@@ -1,6 +1,7 @@
 package com.devlog.archive.similar
 
 import com.devlog.archive.article.ArticleSimilarityRepository
+import com.devlog.archive.article.ArticleTopicHintExtractor
 import com.devlog.archive.article.CandidateArticleRow
 import com.devlog.archive.article.LexicalArticleRow
 import com.devlog.archive.article.SimilarArticleRow
@@ -34,7 +35,7 @@ class SimilarService(
     private val minimumKeywordOverlap = 0.12
     private val minimumTitleOverlap = 0.2
     private val minimumFinalScore = 0.52
-    private val lexicalStrictScore = 0.5
+    private val lexicalStrictScore = 0.46
     private val fallbackVectorSimilarity = 0.44
     private val fallbackFinalScore = 0.42
     private val lastResortVectorSimilarity = 0.37
@@ -210,7 +211,8 @@ class SimilarService(
             vectorScore >= strongVectorSimilarity ->
                 vectorScore * 0.88 + lexicalSignals.lexicalScore * 0.12
 
-            lexicalSignals.lexicalScore >= lexicalStrictScore && lexicalSignals.phraseScore >= 0.5 ->
+            lexicalSignals.lexicalScore >= lexicalStrictScore &&
+                (lexicalSignals.phraseScore >= 0.5 || lexicalSignals.topicOverlap >= 0.5) ->
                 lexicalSignals.lexicalScore * 0.92
 
             else -> 0.0
@@ -263,23 +265,35 @@ class SimilarService(
     ): LexicalSignals {
         val titleTokens = extractKeywords(candidate.title, 14)
         val summaryTokens = extractKeywords(candidate.summary.orEmpty(), 26)
-        val candidateTokens = titleTokens + summaryTokens
+        val candidateTopicHints = candidate.topicHints.ifEmpty {
+            ArticleTopicHintExtractor.extract(candidate.title, candidate.summary)
+        }
+        val candidateTopicTokens = extractKeywords(candidateTopicHints.joinToString(" "), 18)
+        val candidateTokens = titleTokens + summaryTokens + candidateTopicTokens
         val normalizedTitle = normalizeText(candidate.title)
         val normalizedSummary = normalizeText(candidate.summary.orEmpty())
+        val normalizedTopicHints = normalizeText(candidateTopicHints.joinToString(" "))
         val phraseScore = if (queryPhrases.isEmpty()) {
             0.0
         } else {
             val titleMatches = queryPhrases.count { it in normalizedTitle }
             val summaryMatches = queryPhrases.count { it in normalizedSummary }
-            min(1.0, (titleMatches + (summaryMatches * 0.5)) / queryPhrases.size.toDouble())
+            val topicMatches = queryPhrases.count { it in normalizedTopicHints }
+            min(1.0, (titleMatches + (summaryMatches * 0.5) + topicMatches) / queryPhrases.size.toDouble())
         }
 
         val titleOverlap = overlapRatio(queryFocusTokens, titleTokens)
         val bodyOverlap = overlapRatio(queryAllTokens, candidateTokens)
-        val topicOverlap = overlapRatio(queryTopicTokens, candidateTokens)
-        val lexicalScore = min(
-            1.0,
-            titleOverlap * 0.4 + bodyOverlap * 0.25 + topicOverlap * 0.2 + phraseScore * 0.15,
+        val topicOverlap = overlapRatio(queryTopicTokens, candidateTopicTokens.ifEmpty { candidateTokens })
+        val lexicalScore = max(
+            min(
+                1.0,
+                titleOverlap * 0.34 + bodyOverlap * 0.2 + topicOverlap * 0.3 + phraseScore * 0.16,
+            ),
+            min(
+                1.0,
+                topicOverlap * 0.62 + phraseScore * 0.18 + bodyOverlap * 0.2,
+            ),
         )
 
         return LexicalSignals(
@@ -356,6 +370,9 @@ class SimilarService(
                     title = row.title,
                     url = row.url,
                     summary = row.summary,
+                    topicHints = existing.topicHints.ifEmpty {
+                        ArticleTopicHintExtractor.fromStorageValue(row.topicHints)
+                    },
                     publishedAt = row.publishedAt,
                     blogId = row.blogId,
                     vectorSimilarity = max(existing.vectorSimilarity ?: 0.0, row.similarity),
@@ -412,6 +429,7 @@ private data class SearchCandidate(
     val title: String,
     val url: String,
     val summary: String?,
+    val topicHints: List<String>,
     val publishedAt: java.time.LocalDateTime?,
     val blogId: Long,
     val vectorSimilarity: Double?,
@@ -423,6 +441,7 @@ private data class SearchCandidate(
                 title = row.title,
                 url = row.url,
                 summary = row.summary,
+                topicHints = ArticleTopicHintExtractor.fromStorageValue(row.topicHints),
                 publishedAt = row.publishedAt,
                 blogId = row.blogId,
                 vectorSimilarity = vectorSimilarity,
