@@ -37,24 +37,44 @@ object ArticleTopicHintExtractor {
         "Redis Lua Script" to listOf("redis lua", "lua script"),
         "Redis Cache" to listOf("redis cache", "cache stampede"),
         "Redis" to listOf("redis"),
-        "Kafka Consumer" to listOf("kafka consumer", "consumer", "컨슈머"),
+        "Kafka Consumer" to listOf("kafka consumer", "컨슈머"),
+        "Kafka Streams" to listOf("kafka streams"),
         "Kafka" to listOf("kafka"),
         "Outbox Pattern" to listOf("outbox pattern", "outbox", "아웃박스"),
         "Idempotency" to listOf("idempotency", "deduplication", "idemponent", "멱등성"),
         "Materialized View" to listOf("materialized view", "mview"),
         "Terraform" to listOf("terraform", "테라폼"),
         "PostgreSQL" to listOf("postgresql", "postgres"),
+        "MySQL" to listOf("mysql"),
+        "MongoDB" to listOf("mongodb", "몽고"),
+        "Elasticsearch" to listOf("elasticsearch", "elastic search"),
+        "DynamoDB" to listOf("dynamodb"),
         "Coupon System" to listOf("coupon system", "coupon", "쿠폰 시스템", "쿠폰"),
-        "Failure Handling" to listOf("failure handling", "fault tolerance", "resilience", "fallback", "장애", "격리"),
+        "Failure Handling" to listOf("failure handling", "fault tolerance", "resilience", "fallback", "장애 격리"),
         "Performance" to listOf("performance", "latency", "throughput", "성능"),
         "Prometheus" to listOf("prometheus"),
         "Grafana" to listOf("grafana"),
         "Circuit Breaker" to listOf("circuit breaker"),
+        "Spring Boot" to listOf("spring boot", "springboot"),
+        "Spring" to listOf("spring"),
+        "React" to listOf("react"),
+        "TypeScript" to listOf("typescript"),
+        "Go" to listOf("golang"),
+        "gRPC" to listOf("grpc"),
+        "GraphQL" to listOf("graphql"),
+        "REST API" to listOf("rest api", "restful"),
+        "Microservices" to listOf("microservice", "마이크로서비스"),
+        "Event-Driven" to listOf("event-driven", "event driven", "이벤트 기반"),
+        "CQRS" to listOf("cqrs"),
+        "CI/CD" to listOf("ci/cd", "cicd"),
+        "GitHub Actions" to listOf("github actions"),
         "CloudFront" to listOf("cloudfront"),
         "Docker" to listOf("docker"),
         "Kubernetes" to listOf("kubernetes", "k8s"),
         "AWS" to listOf("aws"),
         "t4g.micro" to listOf("t4g.micro", "t4g micro"),
+        "Monitoring" to listOf("monitoring", "observability", "모니터링"),
+        "Testing" to listOf("tdd", "unit test", "테스트"),
     )
 
     fun extract(title: String, summary: String?): List<String> {
@@ -71,7 +91,7 @@ object ArticleTopicHintExtractor {
         val hints = linkedSetOf<String>()
 
         canonicalTopics.forEach { (topic, aliases) ->
-            if (aliases.any { alias -> alias in combined }) {
+            if (aliases.any { alias -> containsWord(combined, alias) }) {
                 hints += topic
             }
         }
@@ -125,7 +145,7 @@ object ArticleTopicHintExtractor {
             if (topicHints.isNotEmpty()) {
                 add(topicHints.joinToString(" "))
             }
-            summary?.takeIf { it.isNotBlank() }?.let { add(it) }
+            summary?.takeIf { it.isNotBlank() }?.let { add(normalizeText(it)) }
         }
             .joinToString(" ")
             .trim()
@@ -156,6 +176,11 @@ object ArticleTopicHintExtractor {
         return keywordDisplayMap[token]
             ?: token.split(".")
                 .joinToString(".") { part -> part.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
+    }
+
+    private fun containsWord(text: String, word: String): Boolean {
+        val pattern = Regex("(?<![\\p{L}\\p{N}])${Regex.escape(word)}(?![\\p{L}\\p{N}])")
+        return pattern.containsMatchIn(text)
     }
 
     private fun normalizeText(text: String): String {

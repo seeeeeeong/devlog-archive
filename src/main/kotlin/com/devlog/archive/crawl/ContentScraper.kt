@@ -34,7 +34,18 @@ class ContentScraper {
         }
     }
 
+    private val boilerplateSelectors = listOf(
+        "nav", "footer", "header", "aside",
+        ".sidebar", ".comments", ".navigation", ".menu", ".footer", ".header",
+        "[role=navigation]", "[role=banner]", "[role=contentinfo]",
+        "script", "style", "noscript",
+    )
+
     private fun extractContent(doc: Document): String? {
+        boilerplateSelectors.forEach { selector ->
+            doc.select(selector).remove()
+        }
+
         for (selector in contentSelectors) {
             val element = doc.selectFirst(selector) ?: continue
             val text = element.text()

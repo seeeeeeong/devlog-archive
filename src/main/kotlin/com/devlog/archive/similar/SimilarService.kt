@@ -173,8 +173,20 @@ class SimilarService(
             if (topicHints.isNotEmpty()) {
                 add(topicHints.joinToString(" "))
             }
-            add(request.content.take(2500))
+            add(cleanForEmbedding(request.content).take(2500))
         }.joinToString(" ").trim()
+    }
+
+    private fun cleanForEmbedding(text: String): String {
+        return text
+            .replace(Regex("```[\\s\\S]*?```"), " ")
+            .replace(Regex("`[^`]*`"), " ")
+            .replace(Regex("!\\[[^\\]]*]\\([^)]*\\)"), " ")
+            .replace(Regex("\\[([^\\]]+)]\\([^)]*\\)"), "$1")
+            .replace(Regex("https?://\\S+"), " ")
+            .replace(Regex("[*_>#]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     private fun buildFtsQuery(title: String, topicHints: List<String>): String {
@@ -182,7 +194,7 @@ class SimilarService(
             addAll(extractKeywords(title, 6))
             topicHints.forEach { addAll(extractKeywords(it, 4)) }
         }
-        return tokens.take(10).joinToString(" ")
+        return tokens.take(10).joinToString(" | ")
     }
 
     private fun normalizeTopicHints(topicHints: List<String>): List<String> {
@@ -205,10 +217,12 @@ class SimilarService(
         val vectorScore = candidate.vectorSimilarity ?: 0.0
         val hasKeywordSignal = lexicalSignals.titleOverlap >= props.minimumTitleOverlap ||
             lexicalSignals.bodyOverlap >= props.minimumKeywordOverlap ||
-            lexicalSignals.topicOverlap >= 0.18 ||
+            lexicalSignals.topicOverlap >= props.minimumTitleOverlap ||
             lexicalSignals.phraseScore >= 0.35
 
         val w = props.strict
+        val sv = props.strongVector
+        val lo = props.lexicalOnly
         val finalScore = when {
             vectorScore >= props.minimumVectorSimilarity && hasKeywordSignal ->
                 vectorScore * w.vector +
@@ -218,11 +232,11 @@ class SimilarService(
                     lexicalSignals.phraseScore * w.phraseScore
 
             vectorScore >= props.strongVectorSimilarity ->
-                vectorScore * 0.88 + lexicalSignals.lexicalScore * 0.12
+                vectorScore * sv.vectorWeight + lexicalSignals.lexicalScore * sv.lexicalWeight
 
             lexicalSignals.lexicalScore >= props.lexicalStrictScore &&
-                (lexicalSignals.phraseScore >= 0.5 || lexicalSignals.topicOverlap >= 0.5) ->
-                lexicalSignals.lexicalScore * 0.92
+                (lexicalSignals.phraseScore >= lo.minimumPhraseScore || lexicalSignals.topicOverlap >= lo.minimumTopicOverlap) ->
+                lexicalSignals.lexicalScore * lo.multiplier
 
             else -> 0.0
         }
@@ -245,10 +259,11 @@ class SimilarService(
             lexicalSignals.lexicalScore * fw.lexicalDominant + vectorScore * (1.0 - fw.lexicalDominant),
         )
 
+        val fe = props.fallbackEligibility
         val isEligible = vectorScore >= props.fallbackVectorSimilarity ||
-            lexicalSignals.lexicalScore >= 0.46 ||
-            lexicalSignals.phraseScore >= 0.55 ||
-            lexicalSignals.topicOverlap >= 0.34
+            lexicalSignals.lexicalScore >= fe.minimumLexicalScore ||
+            lexicalSignals.phraseScore >= fe.minimumPhraseScore ||
+            lexicalSignals.topicOverlap >= fe.minimumTopicOverlap
 
         return RankedCandidate(candidate = candidate, score = if (isEligible) fallbackScore else 0.0)
     }
@@ -262,7 +277,7 @@ class SimilarService(
     ): RankedCandidate {
         val lexicalSignals = computeLexicalSignals(candidate, queryFocusTokens, queryAllTokens, queryTopicTokens, queryPhrases)
         val vectorScore = candidate.vectorSimilarity ?: 0.0
-        val score = max(vectorScore, lexicalSignals.lexicalScore * 0.75)
+        val score = max(vectorScore, lexicalSignals.lexicalScore * props.lastResortLexicalWeight)
         return RankedCandidate(candidate = candidate, score = score)
     }
 
@@ -349,8 +364,9 @@ class SimilarService(
             return 0.0
         }
 
-        val overlapCount = source.count { it in target }
-        return overlapCount.toDouble() / min(source.size, target.size).toDouble()
+        val intersectionCount = source.count { it in target }
+        val unionCount = source.size + target.size - intersectionCount
+        return intersectionCount.toDouble() / unionCount.toDouble()
     }
 
     private fun buildQueryPhrases(title: String, topicHints: List<String>): List<String> {

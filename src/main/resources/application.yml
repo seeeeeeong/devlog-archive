@@ -31,11 +31,12 @@ similar:
   minimum-final-score: 0.52
   fallback-vector-similarity: 0.44
   fallback-final-score: 0.42
-  last-resort-vector-similarity: 0.37
+  last-resort-vector-similarity: 0.45
   minimum-keyword-overlap: 0.12
   minimum-title-overlap: 0.2
   lexical-strict-score: 0.46
   max-per-blog: 2
+  last-resort-lexical-weight: 0.75
   strict:
     vector: 0.62
     title-overlap: 0.16
@@ -50,6 +51,17 @@ similar:
     body-overlap: 0.2
     topic-overlap: 0.3
     phrase-score: 0.16
+  strong-vector:
+    vector-weight: 0.88
+    lexical-weight: 0.12
+  lexical-only:
+    multiplier: 0.92
+    minimum-phrase-score: 0.5
+    minimum-topic-overlap: 0.5
+  fallback-eligibility:
+    minimum-lexical-score: 0.46
+    minimum-phrase-score: 0.55
+    minimum-topic-overlap: 0.34
 
 admin:
   api-key: ${ADMIN_API_KEY}

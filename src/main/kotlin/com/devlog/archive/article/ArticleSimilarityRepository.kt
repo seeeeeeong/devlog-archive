@@ -26,9 +26,9 @@ interface ArticleSimilarityRepository : Repository<ArticleEntity, Long> {
     @Query(
         value = """
             SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.topic_hints, a.published_at, a.crawled_at,
-                   ts_rank(a.search_vector, plainto_tsquery('simple', :query)) AS text_rank
+                   ts_rank(a.search_vector, to_tsquery('simple', :query)) AS text_rank
             FROM articles a
-            WHERE a.search_vector @@ plainto_tsquery('simple', :query)
+            WHERE a.search_vector @@ to_tsquery('simple', :query)
             ORDER BY text_rank DESC
             LIMIT :limit
         """,
