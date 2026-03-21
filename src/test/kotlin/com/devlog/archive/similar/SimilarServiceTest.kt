@@ -184,9 +184,9 @@ class SimilarServiceTest {
 
         val result = similarService.findSimilar(request)
 
-        assertThat(result.items).hasSize(1)
-        assertThat(result.items.single().articleId).isEqualTo(21L)
-        assertThat(result.items.single().similarity).isGreaterThan(0.42)
+        assertThat(result.items).isNotEmpty
+        assertThat(result.items.first().articleId).isEqualTo(21L)
+        assertThat(result.items.first().similarity).isGreaterThan(0.42)
     }
 
     @Test

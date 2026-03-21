@@ -365,8 +365,7 @@ class SimilarService(
         }
 
         val intersectionCount = source.count { it in target }
-        val unionCount = source.size + target.size - intersectionCount
-        return intersectionCount.toDouble() / unionCount.toDouble()
+        return intersectionCount.toDouble() / max(source.size, target.size).toDouble()
     }
 
     private fun buildQueryPhrases(title: String, topicHints: List<String>): List<String> {

@@ -26,12 +26,12 @@ openai:
   base-url: https://api.openai.com
 
 similar:
-  minimum-vector-similarity: 0.55
+  minimum-vector-similarity: 0.45
   strong-vector-similarity: 0.72
   minimum-final-score: 0.52
-  fallback-vector-similarity: 0.44
-  fallback-final-score: 0.42
-  last-resort-vector-similarity: 0.45
+  fallback-vector-similarity: 0.40
+  fallback-final-score: 0.38
+  last-resort-vector-similarity: 0.42
   minimum-keyword-overlap: 0.12
   minimum-title-overlap: 0.2
   lexical-strict-score: 0.46
@@ -59,9 +59,9 @@ similar:
     minimum-phrase-score: 0.5
     minimum-topic-overlap: 0.5
   fallback-eligibility:
-    minimum-lexical-score: 0.46
-    minimum-phrase-score: 0.55
-    minimum-topic-overlap: 0.34
+    minimum-lexical-score: 0.30
+    minimum-phrase-score: 0.40
+    minimum-topic-overlap: 0.25
 
 admin:
   api-key: ${ADMIN_API_KEY}
