@@ -45,7 +45,7 @@ class SimilarService(
     fun findSimilar(request: SimilarRequest): SimilarResponse {
         log.debug("유사글 검색: title={}", request.title)
 
-        val normalizedTopicHints = normalizeTopicHints(request.topicHints)
+        val normalizedTopicHints = normalizeTopicHints(request.topicHints, request.title, request.content)
         val queryText = buildQueryText(request, normalizedTopicHints)
         val embedding = try {
             embeddingClient.embed(queryText)
@@ -160,7 +160,7 @@ class SimilarService(
     }
 
     fun cacheKey(title: String, content: String, topicHints: List<String>, topK: Int): String {
-        val input = "$title::${content.take(2500)}::${normalizeTopicHints(topicHints).joinToString("|")}::$topK"
+        val input = "$title::${content.take(2500)}::${normalizeTopicHints(topicHints, title, content).joinToString("|")}::$topK"
         return MessageDigest.getInstance("SHA-256")
             .digest(input.toByteArray())
             .joinToString("") { "%02x".format(it) }
@@ -197,13 +197,17 @@ class SimilarService(
         return tokens.take(10).joinToString(" | ")
     }
 
-    private fun normalizeTopicHints(topicHints: List<String>): List<String> {
-        return topicHints.asSequence()
+    private fun normalizeTopicHints(topicHints: List<String>, title: String = "", content: String = ""): List<String> {
+        val provided = topicHints.asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
             .take(8)
             .toList()
+
+        if (provided.isNotEmpty()) return provided
+
+        return ArticleTopicHintExtractor.extract(title, content.take(2500))
     }
 
     private fun scoreCandidate(

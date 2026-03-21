@@ -56,7 +56,7 @@ class SimilarServiceTest {
             null,
         )
 
-        `when`(embeddingClient.embed("Spring Spring Boot")).thenThrow(exception)
+        `when`(embeddingClient.embed(anyString())).thenThrow(exception)
 
         val result = similarService.findSimilar(request)
 
@@ -72,7 +72,7 @@ class SimilarServiceTest {
             topK = 3,
         )
 
-        `when`(embeddingClient.embed("Redis Cache Redis Cache Spring Boot cache stampede lock strategy"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.1, 0.2))
         `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 30))
             .thenReturn(
@@ -123,7 +123,7 @@ class SimilarServiceTest {
             topK = 2,
         )
 
-        `when`(embeddingClient.embed("PostgreSQL Partitioning PostgreSQL Partitioning range partition index pruning strategy"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.5, 0.6))
         `when`(articleSimilarityRepository.findSimilar("[0.5,0.6]", 20))
             .thenReturn(
@@ -159,7 +159,7 @@ class SimilarServiceTest {
             topK = 2,
         )
 
-        `when`(embeddingClient.embed("Terraform AWS Migration Terraform AWS Migration console infrastructure migration and operations"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.7, 0.8))
         `when`(articleSimilarityRepository.findSimilar("[0.7,0.8]", 20))
             .thenReturn(
@@ -197,7 +197,7 @@ class SimilarServiceTest {
             topK = 3,
         )
 
-        `when`(embeddingClient.embed("Kafka Consumer Idempotency Kafka Consumer Idempotency consumer deduplication and final confirmation"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.9, 1.0))
         `when`(articleSimilarityRepository.findSimilar("[0.9,1.0]", 30))
             .thenReturn(
@@ -236,7 +236,7 @@ class SimilarServiceTest {
             topK = 2,
         )
 
-        `when`(embeddingClient.embed("Outbox Pattern Kafka Outbox Pattern Kafka Outbox Kafka reliable event delivery for coupon system"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.3, 0.4))
         `when`(articleSimilarityRepository.findSimilar("[0.3,0.4]", 20))
             .thenReturn(emptyList())
@@ -269,7 +269,7 @@ class SimilarServiceTest {
             topK = 2,
         )
 
-        `when`(embeddingClient.embed("Redis 장애를 사용자 장애로 만들지 않는 법 Redis 장애를 사용자 장애로 만들지 않는 법 Redis Failure Handling 장애 격리와 fallback 전략"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.2, 0.3))
         `when`(articleSimilarityRepository.findSimilar("[0.2,0.3]", 20))
             .thenReturn(emptyList())
@@ -302,7 +302,7 @@ class SimilarServiceTest {
             topK = 5,
         )
 
-        `when`(embeddingClient.embed("Redis Performance Redis Performance redis latency optimization"))
+        `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.1, 0.2))
         `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 50))
             .thenReturn(
