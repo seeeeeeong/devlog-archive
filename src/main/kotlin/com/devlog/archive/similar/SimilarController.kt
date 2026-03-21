@@ -12,11 +12,24 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/v1")
 class SimilarController(
     private val similarService: SimilarService,
+    private val similarClickRepository: SimilarClickRepository,
 ) {
     @PostMapping("/similar")
     fun findSimilar(@Valid @RequestBody request: SimilarRequest): ResponseEntity<SimilarResponse> {
         val result = similarService.findSimilar(request)
         return ResponseEntity.ok(result)
+    }
+
+    @PostMapping("/similar/click")
+    fun recordClick(@Valid @RequestBody request: SimilarClickRequest): ResponseEntity<Map<String, String>> {
+        similarClickRepository.save(
+            SimilarClickEntity(
+                articleId = request.articleId,
+                sourceTitle = request.sourceTitle,
+                stage = request.stage,
+            )
+        )
+        return ResponseEntity.ok(mapOf("status" to "ok"))
     }
 }
 
@@ -48,4 +61,15 @@ data class SimilarArticleDto(
     val summary: String?,
     val publishedAt: String?,
     val similarity: Double,
+)
+
+data class SimilarClickRequest(
+    @field:Min(1)
+    val articleId: Long,
+
+    @field:Size(max = 500)
+    val sourceTitle: String? = null,
+
+    @field:Size(max = 20)
+    val stage: String? = null,
 )

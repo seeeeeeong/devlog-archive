@@ -6,6 +6,7 @@ import com.devlog.archive.article.CandidateArticleRow
 import com.devlog.archive.article.LexicalArticleRow
 import com.devlog.archive.article.SimilarArticleRow
 import com.devlog.archive.blog.BlogCacheService
+import com.devlog.archive.config.SimilarProperties
 import com.devlog.archive.embedding.EmbeddingClient
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
@@ -23,26 +24,15 @@ class SimilarService(
     private val blogCacheService: BlogCacheService,
     private val embeddingClient: EmbeddingClient,
     private val meterRegistry: MeterRegistry,
+    private val props: SimilarProperties,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     private val candidateMultiplier = 10
     private val minimumCandidateCount = 20
-    private val lexicalCandidateMultiplier = 5
-    private val minimumLexicalCandidateCount = 120
-    private val minimumVectorSimilarity = 0.55
-    private val strongVectorSimilarity = 0.72
-    private val minimumKeywordOverlap = 0.12
-    private val minimumTitleOverlap = 0.2
-    private val minimumFinalScore = 0.52
-    private val lexicalStrictScore = 0.46
-    private val fallbackVectorSimilarity = 0.44
-    private val fallbackFinalScore = 0.42
-    private val lastResortVectorSimilarity = 0.37
     private val stopWords = setOf(
         "the", "and", "for", "with", "from", "that", "this", "into", "about", "have", "has",
         "how", "what", "when", "where", "will", "your", "post", "blog", "code", "using", "use",
-        "java", "kotlin", "spring", "boot", "api", "http", "https", "www", "com", "dev", "log",
         "guide", "story", "engineering", "system", "service", "platform",
         "에서", "으로", "하다", "하는", "했다", "대한", "관련", "정리", "구현", "문제", "해결", "개발", "적용",
         "기능", "구조", "설계", "이슈", "트러블", "슈팅", "사용", "방법", "이렇게", "이유", "운영기",
@@ -51,7 +41,6 @@ class SimilarService(
     @Cacheable(
         cacheNames = ["similar"],
         key = "#root.target.cacheKey(#request.title, #request.content, #request.topicHints, #request.topK)",
-        unless = "#result.items.isEmpty()",
     )
     fun findSimilar(request: SimilarRequest): SimilarResponse {
         log.debug("유사글 검색: title={}", request.title)
@@ -72,7 +61,6 @@ class SimilarService(
 
         val vectorLiteral = embedding.joinToString(",", "[", "]")
         val vectorCandidateLimit = max(request.topK * candidateMultiplier, minimumCandidateCount)
-        val lexicalCandidateLimit = max(vectorCandidateLimit * lexicalCandidateMultiplier, minimumLexicalCandidateCount)
 
         val queryTitleTokens = extractKeywords(request.title, 10)
         val queryBodyTokens = extractKeywords(request.content, 28)
@@ -82,7 +70,19 @@ class SimilarService(
         val queryPhrases = buildQueryPhrases(request.title, normalizedTopicHints)
 
         val vectorCandidates = articleSimilarityRepository.findSimilar(vectorLiteral, vectorCandidateLimit)
-        val lexicalCandidates = articleSimilarityRepository.findLexicalCandidates(lexicalCandidateLimit)
+
+        val ftsQuery = buildFtsQuery(request.title, normalizedTopicHints)
+        val lexicalCandidates = if (ftsQuery.isNotBlank()) {
+            try {
+                articleSimilarityRepository.findByFullTextSearch(ftsQuery, vectorCandidateLimit)
+            } catch (e: Exception) {
+                log.debug("FTS 검색 실패, 날짜순 fallback: error={}", e.message)
+                articleSimilarityRepository.findLexicalCandidates(vectorCandidateLimit)
+            }
+        } else {
+            articleSimilarityRepository.findLexicalCandidates(vectorCandidateLimit)
+        }
+
         val topVector = vectorCandidates.firstOrNull()?.similarity ?: 0.0
 
         val mergedCandidates = mergeCandidates(vectorCandidates, lexicalCandidates)
@@ -90,7 +90,7 @@ class SimilarService(
 
         val strictResult = mergedCandidates.toRankedCandidates(
             scorer = { candidate -> scoreCandidate(candidate, queryFocusTokens, queryAllTokens, queryTopicTokens, queryPhrases) },
-            minimumScore = minimumFinalScore,
+            minimumScore = props.minimumFinalScore,
             blogMap = blogMap,
             topK = request.topK,
         )
@@ -108,7 +108,7 @@ class SimilarService(
                 )
                 val fallbackResult = mergedCandidates.toRankedCandidates(
                     scorer = { candidate -> scoreFallbackCandidate(candidate, queryFocusTokens, queryAllTokens, queryTopicTokens, queryPhrases) },
-                    minimumScore = fallbackFinalScore,
+                    minimumScore = props.fallbackFinalScore,
                     blogMap = blogMap,
                     topK = request.topK,
                 )
@@ -126,7 +126,7 @@ class SimilarService(
                         )
                         val lastResortResult = mergedCandidates.toRankedCandidates(
                             scorer = { candidate -> scoreLastResortCandidate(candidate, queryFocusTokens, queryAllTokens, queryTopicTokens, queryPhrases) },
-                            minimumScore = lastResortVectorSimilarity,
+                            minimumScore = props.lastResortVectorSimilarity,
                             blogMap = blogMap,
                             topK = min(request.topK, 1),
                         )
@@ -177,6 +177,14 @@ class SimilarService(
         }.joinToString(" ").trim()
     }
 
+    private fun buildFtsQuery(title: String, topicHints: List<String>): String {
+        val tokens = buildSet {
+            addAll(extractKeywords(title, 6))
+            topicHints.forEach { addAll(extractKeywords(it, 4)) }
+        }
+        return tokens.take(10).joinToString(" ")
+    }
+
     private fun normalizeTopicHints(topicHints: List<String>): List<String> {
         return topicHints.asSequence()
             .map { it.trim() }
@@ -195,23 +203,24 @@ class SimilarService(
     ): RankedCandidate {
         val lexicalSignals = computeLexicalSignals(candidate, queryFocusTokens, queryAllTokens, queryTopicTokens, queryPhrases)
         val vectorScore = candidate.vectorSimilarity ?: 0.0
-        val hasKeywordSignal = lexicalSignals.titleOverlap >= minimumTitleOverlap ||
-            lexicalSignals.bodyOverlap >= minimumKeywordOverlap ||
+        val hasKeywordSignal = lexicalSignals.titleOverlap >= props.minimumTitleOverlap ||
+            lexicalSignals.bodyOverlap >= props.minimumKeywordOverlap ||
             lexicalSignals.topicOverlap >= 0.18 ||
             lexicalSignals.phraseScore >= 0.35
 
+        val w = props.strict
         val finalScore = when {
-            vectorScore >= minimumVectorSimilarity && hasKeywordSignal ->
-                vectorScore * 0.62 +
-                    lexicalSignals.titleOverlap * 0.16 +
-                    lexicalSignals.bodyOverlap * 0.08 +
-                    lexicalSignals.topicOverlap * 0.08 +
-                    lexicalSignals.phraseScore * 0.06
+            vectorScore >= props.minimumVectorSimilarity && hasKeywordSignal ->
+                vectorScore * w.vector +
+                    lexicalSignals.titleOverlap * w.titleOverlap +
+                    lexicalSignals.bodyOverlap * w.bodyOverlap +
+                    lexicalSignals.topicOverlap * w.topicOverlap +
+                    lexicalSignals.phraseScore * w.phraseScore
 
-            vectorScore >= strongVectorSimilarity ->
+            vectorScore >= props.strongVectorSimilarity ->
                 vectorScore * 0.88 + lexicalSignals.lexicalScore * 0.12
 
-            lexicalSignals.lexicalScore >= lexicalStrictScore &&
+            lexicalSignals.lexicalScore >= props.lexicalStrictScore &&
                 (lexicalSignals.phraseScore >= 0.5 || lexicalSignals.topicOverlap >= 0.5) ->
                 lexicalSignals.lexicalScore * 0.92
 
@@ -230,12 +239,13 @@ class SimilarService(
     ): RankedCandidate {
         val lexicalSignals = computeLexicalSignals(candidate, queryFocusTokens, queryAllTokens, queryTopicTokens, queryPhrases)
         val vectorScore = candidate.vectorSimilarity ?: 0.0
+        val fw = props.fallback
         val fallbackScore = max(
-            vectorScore * 0.75 + lexicalSignals.lexicalScore * 0.25,
-            lexicalSignals.lexicalScore * 0.88 + vectorScore * 0.12,
+            vectorScore * fw.vectorDominant + lexicalSignals.lexicalScore * (1.0 - fw.vectorDominant),
+            lexicalSignals.lexicalScore * fw.lexicalDominant + vectorScore * (1.0 - fw.lexicalDominant),
         )
 
-        val isEligible = vectorScore >= fallbackVectorSimilarity ||
+        val isEligible = vectorScore >= props.fallbackVectorSimilarity ||
             lexicalSignals.lexicalScore >= 0.46 ||
             lexicalSignals.phraseScore >= 0.55 ||
             lexicalSignals.topicOverlap >= 0.34
@@ -285,10 +295,11 @@ class SimilarService(
         val titleOverlap = overlapRatio(queryFocusTokens, titleTokens)
         val bodyOverlap = overlapRatio(queryAllTokens, candidateTokens)
         val topicOverlap = overlapRatio(queryTopicTokens, candidateTopicTokens.ifEmpty { candidateTokens })
+        val lw = props.lexical
         val lexicalScore = max(
             min(
                 1.0,
-                titleOverlap * 0.34 + bodyOverlap * 0.2 + topicOverlap * 0.3 + phraseScore * 0.16,
+                titleOverlap * lw.titleOverlap + bodyOverlap * lw.bodyOverlap + topicOverlap * lw.topicOverlap + phraseScore * lw.phraseScore,
             ),
             min(
                 1.0,
@@ -311,9 +322,9 @@ class SimilarService(
         }
 
         return normalizeText(text)
-            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .split(Regex("[^\\p{L}\\p{N}.]+"))
             .asSequence()
-            .map { it.trim() }
+            .map { it.trim().trimEnd('.') }
             .filter { it.length >= 2 }
             .filterNot { it in stopWords }
             .distinct()
@@ -339,7 +350,7 @@ class SimilarService(
         }
 
         val overlapCount = source.count { it in target }
-        return overlapCount.toDouble() / source.size.toDouble()
+        return overlapCount.toDouble() / min(source.size, target.size).toDouble()
     }
 
     private fun buildQueryPhrases(title: String, topicHints: List<String>): List<String> {
@@ -389,10 +400,23 @@ class SimilarService(
         blogMap: Map<Long, String>,
         topK: Int,
     ): List<SimilarArticleDto> {
+        val blogCount = mutableMapOf<Long, Int>()
+        val maxPerBlog = props.maxPerBlog
+
         return asSequence()
             .map(scorer)
             .filter { it.score >= minimumScore }
             .sortedByDescending { it.score }
+            .filter { candidate ->
+                val blogId = candidate.candidate.blogId
+                val count = blogCount.getOrDefault(blogId, 0)
+                if (count < maxPerBlog) {
+                    blogCount[blogId] = count + 1
+                    true
+                } else {
+                    false
+                }
+            }
             .mapNotNull { candidate ->
                 val company = blogMap[candidate.candidate.blogId] ?: return@mapNotNull null
                 SimilarArticleDto(

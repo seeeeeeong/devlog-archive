@@ -17,6 +17,7 @@ class CrawlService(
     private val rssFeedParser: RssFeedParser,
     private val embeddingClient: EmbeddingClient,
     private val articleEmbeddingRepository: ArticleEmbeddingRepository,
+    private val contentScraper: ContentScraper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val crawling = AtomicBoolean(false)
@@ -55,13 +56,16 @@ class CrawlService(
             log.info("RSS 파싱 완료: company={}, count={}", blog.company, parsedArticles.size)
 
             parsedArticles.forEach { parsed ->
-                val article = articleStoreService.saveArticleIfNew(blog, parsed) ?: return@forEach
+                val enrichedSummary = enrichSummary(parsed)
+                val enrichedParsed = if (enrichedSummary != null) parsed.copy(summary = enrichedSummary) else parsed
+
+                val article = articleStoreService.saveArticleIfNew(blog, enrichedParsed) ?: return@forEach
                 newCount++
 
                 try {
                     val text = ArticleTopicHintExtractor.buildEmbeddingText(
                         title = article.title,
-                        summary = parsed.summary,
+                        summary = article.summary,
                         topicHints = ArticleTopicHintExtractor.fromStorageValue(article.topicHints),
                     )
                     val vector = embeddingClient.embed(text)
@@ -79,5 +83,13 @@ class CrawlService(
         }
 
         log.info("크롤링 완료: company={}, status={}, newCount={}", blog.company, status, newCount)
+    }
+
+    private fun enrichSummary(parsed: ParsedArticle): String? {
+        val rssSummary = parsed.summary.orEmpty()
+        if (rssSummary.length >= 800) return null
+
+        val scraped = contentScraper.scrape(parsed.url) ?: return null
+        return if (scraped.length > rssSummary.length) scraped else null
     }
 }

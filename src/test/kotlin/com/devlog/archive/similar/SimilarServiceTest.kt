@@ -6,11 +6,13 @@ import com.devlog.archive.article.LexicalArticleRow
 import com.devlog.archive.article.SimilarArticleRow
 import com.devlog.archive.blog.BlogCacheService
 import com.devlog.archive.blog.BlogEntity
+import com.devlog.archive.config.SimilarProperties
 import com.devlog.archive.embedding.EmbeddingClient
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
@@ -25,15 +27,18 @@ class SimilarServiceTest {
     private val blogCacheService = mock(BlogCacheService::class.java)
     private val embeddingClient = mock(EmbeddingClient::class.java)
     private val meterRegistry = SimpleMeterRegistry()
+    private val props = SimilarProperties()
     private val similarService = SimilarService(
         articleSimilarityRepository,
         blogCacheService,
         embeddingClient,
         meterRegistry,
+        props,
     )
 
     init {
         `when`(articleSimilarityRepository.findLexicalCandidates(anyInt())).thenReturn(emptyList())
+        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt())).thenReturn(emptyList())
     }
 
     @Test
@@ -236,7 +241,7 @@ class SimilarServiceTest {
             .thenReturn(listOf(0.3, 0.4))
         `when`(articleSimilarityRepository.findSimilar("[0.3,0.4]", 20))
             .thenReturn(emptyList())
-        `when`(articleSimilarityRepository.findLexicalCandidates(120))
+        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
             .thenReturn(
                 listOf(
                     lexicalRow(
@@ -269,7 +274,7 @@ class SimilarServiceTest {
             .thenReturn(listOf(0.2, 0.3))
         `when`(articleSimilarityRepository.findSimilar("[0.2,0.3]", 20))
             .thenReturn(emptyList())
-        `when`(articleSimilarityRepository.findLexicalCandidates(120))
+        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
             .thenReturn(
                 listOf(
                     lexicalRow(
@@ -288,6 +293,39 @@ class SimilarServiceTest {
         assertThat(result.items).hasSize(1)
         assertThat(result.items.single().articleId).isEqualTo(51L)
         assertThat(result.items.single().similarity).isGreaterThan(0.45)
+    }
+
+    @Test
+    fun `diversity filter limits results per blog`() {
+        val request = SimilarRequest(
+            title = "Redis Performance",
+            content = "redis latency optimization",
+            topK = 5,
+        )
+
+        `when`(embeddingClient.embed("Redis Performance Redis Performance redis latency optimization"))
+            .thenReturn(listOf(0.1, 0.2))
+        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 50))
+            .thenReturn(
+                listOf(
+                    row(id = 1L, blogId = 1L, title = "Redis Cluster Performance", summary = "redis latency tuning", similarity = 0.80),
+                    row(id = 2L, blogId = 1L, title = "Redis Memory Optimization", summary = "redis memory performance", similarity = 0.78),
+                    row(id = 3L, blogId = 1L, title = "Redis Sentinel Setup", summary = "redis high availability performance", similarity = 0.76),
+                    row(id = 4L, blogId = 2L, title = "Redis Cache Layer Design", summary = "redis performance caching", similarity = 0.74),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(
+            listOf(
+                blog(id = 1L, company = "Company A"),
+                blog(id = 2L, company = "Company B"),
+            )
+        )
+
+        val result = similarService.findSimilar(request)
+
+        val companyACounts = result.items.count { it.company == "Company A" }
+        assertThat(companyACounts).isLessThanOrEqualTo(props.maxPerBlog)
+        assertThat(result.items.any { it.company == "Company B" }).isTrue()
     }
 
     private fun row(

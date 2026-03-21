@@ -25,6 +25,22 @@ interface ArticleSimilarityRepository : Repository<ArticleEntity, Long> {
 
     @Query(
         value = """
+            SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.topic_hints, a.published_at, a.crawled_at,
+                   ts_rank(a.search_vector, plainto_tsquery('simple', :query)) AS text_rank
+            FROM articles a
+            WHERE a.search_vector @@ plainto_tsquery('simple', :query)
+            ORDER BY text_rank DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun findByFullTextSearch(
+        @Param("query") query: String,
+        @Param("limit") limit: Int,
+    ): List<LexicalArticleRow>
+
+    @Query(
+        value = """
             SELECT a.id, a.blog_id, a.title, a.url, a.url_hash, a.summary, a.topic_hints, a.published_at, a.crawled_at
             FROM articles a
             ORDER BY a.published_at DESC NULLS LAST, a.id DESC

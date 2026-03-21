@@ -53,6 +53,9 @@ dependencies {
     // RSS Parser
     implementation("com.rometools:rome:2.1.0")
 
+    // HTML Scraping
+    implementation("org.jsoup:jsoup:1.18.3")
+
     // Retry
     implementation("org.springframework.retry:spring-retry")
     implementation("org.springframework.boot:spring-boot-starter-aop")
