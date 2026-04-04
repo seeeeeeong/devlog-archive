@@ -55,12 +55,30 @@ class SimilarAnalyticsService(private val jdbcTemplate: JdbcTemplate) {
             days,
         ).associate { (it["position"] as Number).toInt() to it["avg_score"] }
 
+        val topSourcePages = jdbcTemplate.queryForList(
+            """
+            SELECT source_title, COUNT(*) AS clicks
+            FROM similar_clicks
+            WHERE source_title IS NOT NULL AND created_at >= now() - INTERVAL '1 day' * ?
+            GROUP BY source_title
+            ORDER BY clicks DESC
+            LIMIT 10
+            """.trimIndent(),
+            days,
+        ).map {
+            mapOf(
+                "sourceTitle" to it["source_title"],
+                "clicks" to it["clicks"],
+            )
+        }
+
         return mapOf(
             "days" to days,
             "totalClicks" to totalClicks,
             "positionDistribution" to positionDistribution,
             "avgRrfScoreByPosition" to avgScoreByPosition,
             "topClickedArticles" to topClickedArticles,
+            "topSourcePages" to topSourcePages,
         )
     }
 }

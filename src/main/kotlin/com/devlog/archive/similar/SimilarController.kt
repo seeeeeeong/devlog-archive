@@ -26,7 +26,6 @@ class SimilarController(
             SimilarClickEntity(
                 articleId = request.articleId,
                 sourceTitle = request.sourceTitle,
-                sourceArticleId = request.sourceArticleId,
                 position = request.position?.toShort(),
                 totalResults = request.totalResults?.toShort(),
                 rrfScore = request.rrfScore,
@@ -73,8 +72,6 @@ data class SimilarClickRequest(
 
     @field:Size(max = 500)
     val sourceTitle: String? = null,
-
-    val sourceArticleId: Long? = null,
 
     @field:Min(1) @field:Max(10)
     val position: Int? = null,
