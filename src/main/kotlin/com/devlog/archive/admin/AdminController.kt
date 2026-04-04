@@ -8,6 +8,7 @@ import com.devlog.archive.config.AdminProperties
 import com.devlog.archive.crawl.CrawlService
 import com.devlog.archive.embedding.EmbeddingClient
 import org.slf4j.LoggerFactory
+import org.springframework.cache.CacheManager
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -25,6 +26,7 @@ class AdminController(
     private val articleRepository: ArticleRepository,
     private val articleEmbeddingRepository: ArticleEmbeddingRepository,
     private val embeddingClient: EmbeddingClient,
+    private val cacheManager: CacheManager,
     private val admin: AdminProperties,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -97,7 +99,8 @@ class AdminController(
             }
         }
 
-        log.info("backfill 완료: success={}, failed={}", success, failed)
+        cacheManager.getCache("similar")?.clear()
+        log.info("backfill 완료: success={}, failed={}, similar 캐시 초기화", success, failed)
         return ResponseEntity.ok(mapOf("success" to success, "failed" to failed, "total" to articles.size))
     }
 }
