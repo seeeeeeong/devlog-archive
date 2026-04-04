@@ -11,6 +11,10 @@ class SimilarClickEntity(
 
     val articleId: Long,
     val sourceTitle: String? = null,
+    val sourceArticleId: Long? = null,
+    val position: Short? = null,
+    val totalResults: Short? = null,
+    val rrfScore: Double? = null,
     val stage: String? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
 )

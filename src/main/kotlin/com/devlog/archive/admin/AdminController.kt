@@ -7,6 +7,7 @@ import com.devlog.archive.blog.BlogRepository
 import com.devlog.archive.config.AdminProperties
 import com.devlog.archive.crawl.CrawlService
 import com.devlog.archive.embedding.EmbeddingClient
+import com.devlog.archive.similar.SimilarAnalyticsService
 import org.slf4j.LoggerFactory
 import org.springframework.cache.CacheManager
 import org.springframework.data.domain.PageRequest
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -27,6 +29,7 @@ class AdminController(
     private val articleEmbeddingRepository: ArticleEmbeddingRepository,
     private val embeddingClient: EmbeddingClient,
     private val cacheManager: CacheManager,
+    private val similarAnalyticsService: SimilarAnalyticsService,
     private val admin: AdminProperties,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -102,5 +105,14 @@ class AdminController(
         cacheManager.getCache("similar")?.clear()
         log.info("backfill 완료: success={}, failed={}, similar 캐시 초기화", success, failed)
         return ResponseEntity.ok(mapOf("success" to success, "failed" to failed, "total" to articles.size))
+    }
+
+    @GetMapping("/admin/analytics/clicks")
+    fun clickAnalytics(
+        @RequestHeader("X-Admin-Key", required = false) key: String?,
+        @RequestParam(defaultValue = "30") days: Int,
+    ): ResponseEntity<Map<String, Any>> {
+        if (key != admin.apiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        return ResponseEntity.ok(similarAnalyticsService.getClickSummary(days))
     }
 }
