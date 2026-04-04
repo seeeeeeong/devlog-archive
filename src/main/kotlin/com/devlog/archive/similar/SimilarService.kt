@@ -6,6 +6,7 @@ import com.devlog.archive.article.CandidateArticleRow
 import com.devlog.archive.article.LexicalArticleRow
 import com.devlog.archive.article.SimilarArticleRow
 import com.devlog.archive.blog.BlogCacheService
+import com.devlog.archive.common.StopWords
 import com.devlog.archive.config.SimilarProperties
 import com.devlog.archive.embedding.EmbeddingClient
 import io.micrometer.core.instrument.MeterRegistry
@@ -29,14 +30,8 @@ class SimilarService(
     private val log = LoggerFactory.getLogger(javaClass)
     private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     private val candidateMultiplier = 10
-    private val minimumCandidateCount = 20
-    private val stopWords = setOf(
-        "the", "and", "for", "with", "from", "that", "this", "into", "about", "have", "has",
-        "how", "what", "when", "where", "will", "your", "post", "blog", "code", "using", "use",
-        "guide", "story", "engineering", "system", "service", "platform",
-        "에서", "으로", "하다", "하는", "했다", "대한", "관련", "정리", "구현", "문제", "해결", "개발", "적용",
-        "기능", "구조", "설계", "이슈", "트러블", "슈팅", "사용", "방법", "이렇게", "이유", "운영기",
-    )
+    private val minimumCandidateCount = 50
+    private val stopWords = StopWords.set
 
     @Cacheable(
         cacheNames = ["similar"],
@@ -50,16 +45,13 @@ class SimilarService(
         val embedding = try {
             embeddingClient.embed(queryText)
         } catch (e: RestClientException) {
-            recordOutcome(stage = "embedding_error", topVector = 0.0, resultCount = 0, vectorCount = 0, lexicalCount = 0)
-            log.warn("임베딩 호출 실패로 유사글 검색을 빈 결과로 처리합니다: title={}, error={}", request.title, e.message)
-            return SimilarResponse(items = emptyList())
+            log.warn("임베딩 호출 실패, lexical fallback 적용: title={}, error={}", request.title, e.message)
+            null
         } catch (e: IllegalStateException) {
-            recordOutcome(stage = "embedding_error", topVector = 0.0, resultCount = 0, vectorCount = 0, lexicalCount = 0)
-            log.warn("임베딩 응답 검증 실패로 유사글 검색을 빈 결과로 처리합니다: title={}, error={}", request.title, e.message)
-            return SimilarResponse(items = emptyList())
+            log.warn("임베딩 응답 검증 실패, lexical fallback 적용: title={}, error={}", request.title, e.message)
+            null
         }
 
-        val vectorLiteral = embedding.joinToString(",", "[", "]")
         val vectorCandidateLimit = max(request.topK * candidateMultiplier, minimumCandidateCount)
 
         val queryTitleTokens = extractKeywords(request.title, 10)
@@ -69,7 +61,12 @@ class SimilarService(
         val queryAllTokens = queryTitleTokens + queryBodyTokens + queryTopicTokens
         val queryPhrases = buildQueryPhrases(request.title, normalizedTopicHints)
 
-        val vectorCandidates = articleSimilarityRepository.findSimilar(vectorLiteral, vectorCandidateLimit)
+        val vectorCandidates = if (embedding != null) {
+            val vectorLiteral = embedding.joinToString(",", "[", "]")
+            articleSimilarityRepository.findSimilar(vectorLiteral, vectorCandidateLimit)
+        } else {
+            emptyList()
+        }
 
         val ftsQuery = buildFtsQuery(request.title, normalizedTopicHints)
         val lexicalCandidates = if (ftsQuery.isNotBlank()) {
@@ -86,6 +83,11 @@ class SimilarService(
         val topVector = vectorCandidates.firstOrNull()?.similarity ?: 0.0
 
         val mergedCandidates = mergeCandidates(vectorCandidates, lexicalCandidates)
+
+        if (embedding == null && mergedCandidates.isEmpty()) {
+            recordOutcome(stage = "embedding_error", topVector = 0.0, resultCount = 0, vectorCount = 0, lexicalCount = 0)
+            return SimilarResponse(items = emptyList())
+        }
         val blogMap = blogCacheService.findAll().associate { it.id to it.company }
 
         val strictResult = mergedCandidates.toRankedCandidates(
@@ -136,7 +138,8 @@ class SimilarService(
             }
         }
 
-        val (stage, result) = stageAndResult
+        val (rawStage, result) = stageAndResult
+        val stage = if (embedding == null && result.isNotEmpty()) "lexical_fallback" else rawStage
         recordOutcome(
             stage = stage,
             topVector = topVector,
@@ -419,18 +422,18 @@ class SimilarService(
         blogMap: Map<Long, String>,
         topK: Int,
     ): List<SimilarArticleDto> {
-        val blogCount = mutableMapOf<Long, Int>()
-        val maxPerBlog = props.maxPerBlog
+        val companyCount = mutableMapOf<String, Int>()
+        val maxPerCompany = props.maxPerBlog
 
         return asSequence()
             .map(scorer)
             .filter { it.score >= minimumScore }
             .sortedByDescending { it.score }
             .filter { candidate ->
-                val blogId = candidate.candidate.blogId
-                val count = blogCount.getOrDefault(blogId, 0)
-                if (count < maxPerBlog) {
-                    blogCount[blogId] = count + 1
+                val company = blogMap[candidate.candidate.blogId] ?: return@filter false
+                val count = companyCount.getOrDefault(company, 0)
+                if (count < maxPerCompany) {
+                    companyCount[company] = count + 1
                     true
                 } else {
                     false
