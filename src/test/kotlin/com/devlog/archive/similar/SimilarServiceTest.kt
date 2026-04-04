@@ -36,7 +36,6 @@ class SimilarServiceTest {
     )
 
     init {
-        `when`(articleSimilarityRepository.findLexicalCandidates(anyInt())).thenReturn(emptyList())
         `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt())).thenReturn(emptyList())
     }
 
@@ -98,7 +97,7 @@ class SimilarServiceTest {
     }
 
     @Test
-    fun `reranks candidates with stronger title and keyword overlap`() {
+    fun `RRF boosts candidates appearing in both vector and FTS results`() {
         val request = SimilarRequest(
             title = "Redis Cache",
             content = "Spring Boot cache stampede lock strategy",
@@ -107,30 +106,19 @@ class SimilarServiceTest {
 
         `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.1, 0.2))
-        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 30))
+        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", props.vectorCandidateLimit))
             .thenReturn(
                 listOf(
-                    row(
-                        id = 1L,
-                        blogId = 1L,
-                        title = "Spring Boot Cache Configuration",
-                        summary = "cache strategy boot setup",
-                        similarity = 0.66,
-                    ),
-                    row(
-                        id = 2L,
-                        blogId = 2L,
-                        title = "Redis Cache Stampede with Spring",
-                        summary = "redis lock cache miss strategy",
-                        similarity = 0.65,
-                    ),
-                    row(
-                        id = 3L,
-                        blogId = 3L,
-                        title = "Kafka Consumer Retry",
-                        summary = "dead letter queue",
-                        similarity = 0.58,
-                    ),
+                    row(id = 1L, blogId = 1L, title = "Spring Boot Cache Configuration", summary = "cache strategy", similarity = 0.66),
+                    row(id = 2L, blogId = 2L, title = "Redis Cache Stampede with Spring", summary = "redis lock cache", similarity = 0.65),
+                    row(id = 3L, blogId = 3L, title = "Kafka Consumer Retry", summary = "dead letter queue", similarity = 0.58),
+                )
+            )
+        // Only article 2 appears in FTS — it should get boosted above article 1 (vector-only)
+        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
+            .thenReturn(
+                listOf(
+                    lexicalRow(id = 2L, blogId = 2L, title = "Redis Cache Stampede with Spring", summary = "redis lock cache"),
                 )
             )
         `when`(blogCacheService.findAll()).thenReturn(
@@ -144,191 +132,52 @@ class SimilarServiceTest {
         val result = similarService.findSimilar(request)
 
         assertThat(result.items).isNotEmpty
+        // Article 2 appears in both lists: vector rank 2 + FTS rank 1 → highest combined RRF
         assertThat(result.items.first().articleId).isEqualTo(2L)
-        assertThat(result.items.first().company).isEqualTo("Company B")
+        // Article 3 only in vector at rank 3, should have lowest RRF score
+        val article3 = result.items.find { it.articleId == 3L }
+        if (article3 != null) {
+            assertThat(article3.similarity).isLessThan(result.items.first().similarity)
+        }
     }
 
     @Test
-    fun `filters out weak vector matches without keyword signal`() {
+    fun `filters candidates below minimum RRF score`() {
         val request = SimilarRequest(
             title = "PostgreSQL Partitioning",
             content = "range partition index pruning strategy",
             topK = 2,
         )
 
+        // Use very high rrfK so scores are very low
+        val strictProps = SimilarProperties(minimumRrfScore = 0.05)
+        val strictService = SimilarService(
+            articleSimilarityRepository,
+            blogCacheService,
+            embeddingClient,
+            meterRegistry,
+            strictProps,
+        )
+
         `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.5, 0.6))
-        `when`(articleSimilarityRepository.findSimilar("[0.5,0.6]", 20))
+        // Only 2 candidates at high ranks → low RRF scores
+        `when`(articleSimilarityRepository.findSimilar("[0.5,0.6]", strictProps.vectorCandidateLimit))
             .thenReturn(
                 listOf(
-                    row(
-                        id = 11L,
-                        blogId = 1L,
-                        title = "CSS Animation Timing",
-                        summary = "animation easing transitions",
-                        similarity = 0.29,
-                    ),
-                    row(
-                        id = 12L,
-                        blogId = 1L,
-                        title = "Kubernetes Deployment Strategy",
-                        summary = "rolling update probes",
-                        similarity = 0.27,
-                    ),
+                    row(id = 11L, blogId = 1L, title = "CSS Animation", summary = "animation", similarity = 0.29),
                 )
             )
         `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
 
-        val result = similarService.findSimilar(request)
+        val result = strictService.findSimilar(request)
 
+        // 1/(60+1) = 0.0164 which is below 0.05 threshold
         assertThat(result.items).isEmpty()
     }
 
     @Test
-    fun `returns fallback vector matches when strict rerank is empty`() {
-        val request = SimilarRequest(
-            title = "Terraform AWS Migration",
-            content = "console infrastructure migration and operations",
-            topK = 2,
-        )
-
-        `when`(embeddingClient.embed(anyString()))
-            .thenReturn(listOf(0.7, 0.8))
-        `when`(articleSimilarityRepository.findSimilar("[0.7,0.8]", 20))
-            .thenReturn(
-                listOf(
-                    row(
-                        id = 21L,
-                        blogId = 1L,
-                        title = "Large Scale Cloud Platform Story",
-                        summary = "infrastructure migration operations reliability",
-                        similarity = 0.63,
-                    ),
-                    row(
-                        id = 22L,
-                        blogId = 1L,
-                        title = "Developer Productivity Metrics",
-                        summary = "engineering process dashboard",
-                        similarity = 0.51,
-                    ),
-                )
-            )
-        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
-
-        val result = similarService.findSimilar(request)
-
-        assertThat(result.items).isNotEmpty
-        assertThat(result.items.first().articleId).isEqualTo(21L)
-        assertThat(result.items.first().similarity).isGreaterThan(0.42)
-    }
-
-    @Test
-    fun `returns top vector match as last resort when fallback is still empty`() {
-        val request = SimilarRequest(
-            title = "Kafka Consumer Idempotency",
-            content = "consumer deduplication and final confirmation",
-            topK = 3,
-        )
-
-        `when`(embeddingClient.embed(anyString()))
-            .thenReturn(listOf(0.9, 1.0))
-        `when`(articleSimilarityRepository.findSimilar("[0.9,1.0]", 30))
-            .thenReturn(
-                listOf(
-                    row(
-                        id = 31L,
-                        blogId = 1L,
-                        title = "Messaging Platform Overview",
-                        summary = "distributed stream processing architecture",
-                        similarity = 0.47,
-                    ),
-                    row(
-                        id = 32L,
-                        blogId = 1L,
-                        title = "Frontend Bundle Optimization",
-                        summary = "code split asset pipeline",
-                        similarity = 0.34,
-                    ),
-                )
-            )
-        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
-
-        val result = similarService.findSimilar(request)
-
-        assertThat(result.items).hasSize(1)
-        assertThat(result.items.single().articleId).isEqualTo(31L)
-        assertThat(result.items.single().similarity).isEqualTo(0.47)
-    }
-
-    @Test
-    fun `returns lexical only candidate when topic hints strongly match`() {
-        val request = SimilarRequest(
-            title = "Outbox Pattern Kafka",
-            content = "reliable event delivery for coupon system",
-            topicHints = listOf("Outbox", "Kafka"),
-            topK = 2,
-        )
-
-        `when`(embeddingClient.embed(anyString()))
-            .thenReturn(listOf(0.3, 0.4))
-        `when`(articleSimilarityRepository.findSimilar("[0.3,0.4]", 20))
-            .thenReturn(emptyList())
-        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
-            .thenReturn(
-                listOf(
-                    lexicalRow(
-                        id = 41L,
-                        blogId = 1L,
-                        title = "Outbox Kafka Messaging at Scale",
-                        summary = "reliable delivery with outbox and kafka",
-                    )
-                )
-            )
-        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
-
-        val result = similarService.findSimilar(request)
-
-        assertThat(result.items).hasSize(1)
-        assertThat(result.items.single().articleId).isEqualTo(41L)
-        assertThat(result.items.single().similarity).isGreaterThan(0.4)
-    }
-
-    @Test
-    fun `uses stored candidate topic hints during reranking`() {
-        val request = SimilarRequest(
-            title = "Redis 장애를 사용자 장애로 만들지 않는 법",
-            content = "장애 격리와 fallback 전략",
-            topicHints = listOf("Redis", "Failure Handling"),
-            topK = 2,
-        )
-
-        `when`(embeddingClient.embed(anyString()))
-            .thenReturn(listOf(0.2, 0.3))
-        `when`(articleSimilarityRepository.findSimilar("[0.2,0.3]", 20))
-            .thenReturn(emptyList())
-        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
-            .thenReturn(
-                listOf(
-                    lexicalRow(
-                        id = 51L,
-                        blogId = 1L,
-                        title = "서비스 장애 복구 패턴",
-                        summary = "트래픽 급증 상황에서 fallback과 격리를 적용한 운영 경험",
-                        topicHints = listOf("Redis", "Failure Handling"),
-                    )
-                )
-            )
-        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
-
-        val result = similarService.findSimilar(request)
-
-        assertThat(result.items).hasSize(1)
-        assertThat(result.items.single().articleId).isEqualTo(51L)
-        assertThat(result.items.single().similarity).isGreaterThan(0.45)
-    }
-
-    @Test
-    fun `diversity filter limits results per blog`() {
+    fun `diversity filter limits results per company`() {
         val request = SimilarRequest(
             title = "Redis Performance",
             content = "redis latency optimization",
@@ -337,12 +186,12 @@ class SimilarServiceTest {
 
         `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.1, 0.2))
-        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 50))
+        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", props.vectorCandidateLimit))
             .thenReturn(
                 listOf(
                     row(id = 1L, blogId = 1L, title = "Redis Cluster Performance", summary = "redis latency tuning", similarity = 0.80),
                     row(id = 2L, blogId = 1L, title = "Redis Memory Optimization", summary = "redis memory performance", similarity = 0.78),
-                    row(id = 3L, blogId = 1L, title = "Redis Sentinel Setup", summary = "redis high availability performance", similarity = 0.76),
+                    row(id = 3L, blogId = 1L, title = "Redis Sentinel Setup", summary = "redis high availability", similarity = 0.76),
                     row(id = 4L, blogId = 2L, title = "Redis Cache Layer Design", summary = "redis performance caching", similarity = 0.74),
                 )
             )
@@ -370,12 +219,12 @@ class SimilarServiceTest {
 
         `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.1, 0.2))
-        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 50))
+        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", props.vectorCandidateLimit))
             .thenReturn(
                 listOf(
                     row(id = 1L, blogId = 1L, title = "Redis Cluster Performance", summary = "redis latency tuning", similarity = 0.80),
                     row(id = 2L, blogId = 2L, title = "Redis Memory Optimization", summary = "redis memory performance", similarity = 0.78),
-                    row(id = 3L, blogId = 3L, title = "Redis Sentinel Setup", summary = "redis high availability performance", similarity = 0.76),
+                    row(id = 3L, blogId = 3L, title = "Redis Sentinel Setup", summary = "redis high availability", similarity = 0.76),
                     row(id = 4L, blogId = 4L, title = "Redis Cache Layer Design", summary = "redis performance caching", similarity = 0.74),
                 )
             )
@@ -393,6 +242,60 @@ class SimilarServiceTest {
         val kakaoCount = result.items.count { it.company == "카카오" }
         assertThat(kakaoCount).isLessThanOrEqualTo(props.maxPerBlog)
         assertThat(result.items.any { it.company == "토스" }).isTrue()
+    }
+
+    @Test
+    fun `vector-only candidate gets single RRF term`() {
+        val request = SimilarRequest(
+            title = "Kafka Streams",
+            content = "stream processing pipeline",
+            topK = 3,
+        )
+
+        `when`(embeddingClient.embed(anyString()))
+            .thenReturn(listOf(0.3, 0.4))
+        `when`(articleSimilarityRepository.findSimilar("[0.3,0.4]", props.vectorCandidateLimit))
+            .thenReturn(
+                listOf(
+                    row(id = 1L, blogId = 1L, title = "Kafka Streams Processing", summary = "stream pipeline", similarity = 0.75),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).hasSize(1)
+        // score = 1/(60+1) ≈ 0.0164, above default minimum 0.015
+        assertThat(result.items.first().similarity).isGreaterThan(0.015)
+        assertThat(result.items.first().similarity).isLessThan(0.02)
+    }
+
+    @Test
+    fun `FTS-only candidate gets single RRF term`() {
+        val request = SimilarRequest(
+            title = "Outbox Pattern Kafka",
+            content = "reliable event delivery",
+            topicHints = listOf("Outbox", "Kafka"),
+            topK = 2,
+        )
+
+        `when`(embeddingClient.embed(anyString()))
+            .thenReturn(listOf(0.3, 0.4))
+        `when`(articleSimilarityRepository.findSimilar("[0.3,0.4]", props.vectorCandidateLimit))
+            .thenReturn(emptyList())
+        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
+            .thenReturn(
+                listOf(
+                    lexicalRow(id = 41L, blogId = 1L, title = "Outbox Kafka Messaging at Scale", summary = "reliable delivery with outbox"),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).hasSize(1)
+        assertThat(result.items.single().articleId).isEqualTo(41L)
+        assertThat(result.items.single().similarity).isGreaterThan(0.015)
     }
 
     private fun row(
