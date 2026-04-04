@@ -13,6 +13,7 @@ import org.springframework.cache.CacheManager
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestHeader
@@ -72,6 +73,7 @@ class AdminController(
         ))
     }
 
+    @Transactional
     @PostMapping("/admin/backfill-embeddings")
     fun backfillEmbeddings(
         @RequestHeader("X-Admin-Key", required = false) key: String?,
