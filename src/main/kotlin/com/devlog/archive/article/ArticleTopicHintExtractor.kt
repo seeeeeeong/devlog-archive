@@ -1,15 +1,11 @@
 package com.devlog.archive.article
 
+import com.devlog.archive.common.StopWords
+
 object ArticleTopicHintExtractor {
     private const val storageDelimiter = "\n"
 
-    private val stopWords = setOf(
-        "the", "and", "for", "with", "from", "that", "this", "into", "about", "have", "has",
-        "how", "what", "when", "where", "will", "your", "post", "blog", "code", "using", "use",
-        "guide", "story", "engineering", "system", "service", "platform", "team", "tech",
-        "에서", "으로", "하다", "하는", "했다", "대한", "관련", "정리", "구현", "문제", "해결", "개발", "적용",
-        "기능", "구조", "설계", "이슈", "트러블", "슈팅", "사용", "방법", "이렇게", "이유", "운영기", "구축기",
-    )
+    private val stopWords = StopWords.set
 
     private val keywordDisplayMap = mapOf(
         "aws" to "AWS",
@@ -31,6 +27,16 @@ object ArticleTopicHintExtractor {
         "grpc" to "gRPC",
         "mview" to "Materialized View",
         "llm" to "LLM",
+        "pgvector" to "pgvector",
+        "embedding" to "Embedding",
+        "openai" to "OpenAI",
+        "langchain" to "LangChain",
+        "rag" to "RAG",
+        "jpa" to "JPA",
+        "hibernate" to "Hibernate",
+        "flyway" to "Flyway",
+        "nginx" to "Nginx",
+        "caddy" to "Caddy",
     )
 
     private val canonicalTopics = linkedMapOf(
@@ -75,6 +81,26 @@ object ArticleTopicHintExtractor {
         "t4g.micro" to listOf("t4g.micro", "t4g micro"),
         "Monitoring" to listOf("monitoring", "observability", "모니터링"),
         "Testing" to listOf("tdd", "unit test", "테스트"),
+        "pgvector" to listOf("pgvector", "pg_vector"),
+        "Vector Search" to listOf("vector search", "벡터 검색", "벡터 서치", "similarity search"),
+        "Embedding" to listOf("embedding", "임베딩"),
+        "Cosine Similarity" to listOf("cosine similarity", "cosine distance", "코사인 유사도"),
+        "Recommendation" to listOf("recommendation", "추천 시스템", "추천 엔진"),
+        "Full-Text Search" to listOf("full-text search", "full text search", "전문 검색"),
+        "RAG" to listOf("retrieval augmented", "retrieval-augmented"),
+        "LangChain" to listOf("langchain"),
+        "OpenAI" to listOf("openai"),
+        "JPA" to listOf("jpa", "hibernate"),
+        "Transaction" to listOf("transaction", "트랜잭션"),
+        "Index" to listOf("index tuning", "인덱스 튜닝"),
+        "Caching" to listOf("caching", "캐싱", "cache invalidation"),
+        "Load Balancing" to listOf("load balancing", "로드밸런싱"),
+        "API Gateway" to listOf("api gateway"),
+        "Batch Processing" to listOf("batch processing", "배치 처리"),
+        "Flyway" to listOf("flyway"),
+        "Nginx" to listOf("nginx"),
+        "Caddy" to listOf("caddy"),
+        "OpenSearch" to listOf("opensearch"),
     )
 
     fun extract(title: String, summary: String?): List<String> {
@@ -140,14 +166,13 @@ object ArticleTopicHintExtractor {
 
     fun buildEmbeddingText(title: String, summary: String?, topicHints: List<String>): String {
         return buildList {
-            add(title)
-            add(title)
+            add("Title: $title")
             if (topicHints.isNotEmpty()) {
-                add(topicHints.joinToString(" "))
+                add("Topics: ${topicHints.joinToString(", ")}")
             }
-            summary?.takeIf { it.isNotBlank() }?.let { add(normalizeText(it)) }
+            summary?.takeIf { it.isNotBlank() }?.let { add("Summary: ${normalizeText(it)}") }
         }
-            .joinToString(" ")
+            .joinToString("\n")
             .trim()
     }
 

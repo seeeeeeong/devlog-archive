@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -42,10 +41,45 @@ class SimilarServiceTest {
     }
 
     @Test
-    fun `returns empty items when embedding request fails`() {
+    fun `falls back to lexical results when embedding request fails`() {
         val request = SimilarRequest(
-            title = "Spring",
-            content = "Boot",
+            title = "Spring Boot Cache",
+            content = "cache stampede lock strategy",
+            topK = 3,
+        )
+        val exception = HttpClientErrorException.create(
+            HttpStatus.UNAUTHORIZED,
+            "Unauthorized",
+            HttpHeaders.EMPTY,
+            ByteArray(0),
+            null,
+        )
+
+        `when`(embeddingClient.embed(anyString())).thenThrow(exception)
+        `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
+            .thenReturn(
+                listOf(
+                    lexicalRow(
+                        id = 101L,
+                        blogId = 1L,
+                        title = "Spring Boot Cache Stampede Prevention",
+                        summary = "cache stampede lock strategy spring boot",
+                    ),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
+
+        val result = similarService.findSimilar(request)
+
+        assertThat(result.items).isNotEmpty
+        assertThat(result.items.first().articleId).isEqualTo(101L)
+    }
+
+    @Test
+    fun `returns empty when embedding fails and no lexical candidates exist`() {
+        val request = SimilarRequest(
+            title = "xyzzy",
+            content = "qwerty",
             topK = 3,
         )
         val exception = HttpClientErrorException.create(
@@ -61,7 +95,6 @@ class SimilarServiceTest {
         val result = similarService.findSimilar(request)
 
         assertThat(result.items).isEmpty()
-        verifyNoInteractions(articleSimilarityRepository)
     }
 
     @Test
@@ -325,6 +358,41 @@ class SimilarServiceTest {
         val companyACounts = result.items.count { it.company == "Company A" }
         assertThat(companyACounts).isLessThanOrEqualTo(props.maxPerBlog)
         assertThat(result.items.any { it.company == "Company B" }).isTrue()
+    }
+
+    @Test
+    fun `diversity filter limits by company not blog id`() {
+        val request = SimilarRequest(
+            title = "Redis Performance",
+            content = "redis latency optimization",
+            topK = 5,
+        )
+
+        `when`(embeddingClient.embed(anyString()))
+            .thenReturn(listOf(0.1, 0.2))
+        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", 50))
+            .thenReturn(
+                listOf(
+                    row(id = 1L, blogId = 1L, title = "Redis Cluster Performance", summary = "redis latency tuning", similarity = 0.80),
+                    row(id = 2L, blogId = 2L, title = "Redis Memory Optimization", summary = "redis memory performance", similarity = 0.78),
+                    row(id = 3L, blogId = 3L, title = "Redis Sentinel Setup", summary = "redis high availability performance", similarity = 0.76),
+                    row(id = 4L, blogId = 4L, title = "Redis Cache Layer Design", summary = "redis performance caching", similarity = 0.74),
+                )
+            )
+        `when`(blogCacheService.findAll()).thenReturn(
+            listOf(
+                blog(id = 1L, company = "카카오"),
+                blog(id = 2L, company = "카카오"),
+                blog(id = 3L, company = "카카오"),
+                blog(id = 4L, company = "토스"),
+            )
+        )
+
+        val result = similarService.findSimilar(request)
+
+        val kakaoCount = result.items.count { it.company == "카카오" }
+        assertThat(kakaoCount).isLessThanOrEqualTo(props.maxPerBlog)
+        assertThat(result.items.any { it.company == "토스" }).isTrue()
     }
 
     private fun row(

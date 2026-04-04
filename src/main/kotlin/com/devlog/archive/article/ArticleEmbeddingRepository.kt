@@ -16,4 +16,17 @@ class ArticleEmbeddingRepository(private val jdbcTemplate: JdbcTemplate) {
             vectorLiteral,
         )
     }
+
+    @Transactional
+    fun upsert(articleId: Long, vector: List<Double>) {
+        val vectorLiteral = vector.joinToString(",", "[", "]")
+        jdbcTemplate.update(
+            """
+            INSERT INTO article_embeddings (article_id, embedding) VALUES (?, ?::vector)
+            ON CONFLICT (article_id) DO UPDATE SET embedding = EXCLUDED.embedding
+            """.trimIndent(),
+            articleId,
+            vectorLiteral,
+        )
+    }
 }

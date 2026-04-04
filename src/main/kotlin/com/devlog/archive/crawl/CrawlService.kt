@@ -6,6 +6,7 @@ import com.devlog.archive.blog.BlogEntity
 import com.devlog.archive.blog.BlogRepository
 import com.devlog.archive.embedding.EmbeddingClient
 import org.slf4j.LoggerFactory
+import org.springframework.cache.CacheManager
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import java.util.concurrent.atomic.AtomicBoolean
@@ -18,6 +19,7 @@ class CrawlService(
     private val embeddingClient: EmbeddingClient,
     private val articleEmbeddingRepository: ArticleEmbeddingRepository,
     private val contentScraper: ContentScraper,
+    private val cacheManager: CacheManager,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val crawling = AtomicBoolean(false)
@@ -40,6 +42,8 @@ class CrawlService(
                     log.error("블로그 크롤링 실패: company={}, error={}", blog.company, e.message)
                 }
             }
+            cacheManager.getCache("similar")?.clear()
+            log.info("크롤링 완료 후 similar 캐시 초기화")
         } finally {
             crawling.set(false)
         }
@@ -69,7 +73,7 @@ class CrawlService(
                         topicHints = ArticleTopicHintExtractor.fromStorageValue(article.topicHints),
                     )
                     val vector = embeddingClient.embed(text)
-                    articleEmbeddingRepository.save(article.id, vector)
+                    articleEmbeddingRepository.upsert(article.id, vector)
                 } catch (e: Exception) {
                     log.warn("임베딩 저장 실패: articleId={}, error={}", article.id, e.message)
                 }
