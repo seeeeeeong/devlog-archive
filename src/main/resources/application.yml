@@ -27,7 +27,7 @@ openai:
 
 similar:
   rrf-k: 60
-  minimum-rrf-score: 0.015
+  minimum-rrf-score: 0.008
   max-per-blog: 2
   vector-candidate-limit: 50
   fts-candidate-limit: 50

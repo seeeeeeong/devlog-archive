@@ -37,6 +37,7 @@ class SimilarServiceTest {
 
     init {
         `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt())).thenReturn(emptyList())
+        `when`(articleSimilarityRepository.findLexicalCandidates(anyInt())).thenReturn(emptyList())
     }
 
     @Test
@@ -149,8 +150,8 @@ class SimilarServiceTest {
             topK = 2,
         )
 
-        // Use very high rrfK so scores are very low
-        val strictProps = SimilarProperties(minimumRrfScore = 0.05)
+        // Use high minimumRrfScore so single-source rank-1 candidate (1/61 ≈ 0.0164) is filtered
+        val strictProps = SimilarProperties(minimumRrfScore = 0.02)
         val strictService = SimilarService(
             articleSimilarityRepository,
             blogCacheService,
@@ -161,19 +162,47 @@ class SimilarServiceTest {
 
         `when`(embeddingClient.embed(anyString()))
             .thenReturn(listOf(0.5, 0.6))
-        // Only 2 candidates at high ranks → low RRF scores
         `when`(articleSimilarityRepository.findSimilar("[0.5,0.6]", strictProps.vectorCandidateLimit))
             .thenReturn(
                 listOf(
                     row(id = 11L, blogId = 1L, title = "CSS Animation", summary = "animation", similarity = 0.29),
                 )
             )
+        `when`(articleSimilarityRepository.findLexicalCandidates(anyInt())).thenReturn(emptyList())
         `when`(blogCacheService.findAll()).thenReturn(listOf(blog(id = 1L, company = "Company A")))
 
         val result = strictService.findSimilar(request)
 
-        // 1/(60+1) = 0.0164 which is below 0.05 threshold
+        // 1/(60+1) = 0.0164 which is below 0.02 threshold
         assertThat(result.items).isEmpty()
+    }
+
+    @Test
+    fun `single-source candidates pass default threshold up to high ranks`() {
+        val request = SimilarRequest(
+            title = "Redis Performance",
+            content = "redis latency optimization",
+            topK = 10,
+        )
+
+        // 10 candidates from vector only — with default threshold 0.008,
+        // rank 10 gives 1/(60+10) = 0.0143, well above cutoff
+        val candidates = (1L..10L).map { i ->
+            row(id = i, blogId = i, title = "Redis Article $i", summary = "redis content $i", similarity = 0.80 - i * 0.02)
+        }
+        val blogs = (1L..10L).map { blog(id = it, company = "Company $it") }
+
+        `when`(embeddingClient.embed(anyString()))
+            .thenReturn(listOf(0.1, 0.2))
+        `when`(articleSimilarityRepository.findSimilar("[0.1,0.2]", props.vectorCandidateLimit))
+            .thenReturn(candidates)
+        `when`(articleSimilarityRepository.findLexicalCandidates(anyInt())).thenReturn(emptyList())
+        `when`(blogCacheService.findAll()).thenReturn(blogs)
+
+        val result = similarService.findSimilar(request)
+
+        // All 10 should pass: rank 10 → 1/(60+10)=0.0143 > 0.008
+        assertThat(result.items).hasSize(10)
     }
 
     @Test
@@ -265,8 +294,8 @@ class SimilarServiceTest {
         val result = similarService.findSimilar(request)
 
         assertThat(result.items).hasSize(1)
-        // score = 1/(60+1) ≈ 0.0164, above default minimum 0.015
-        assertThat(result.items.first().similarity).isGreaterThan(0.015)
+        // score = 1/(60+1) ≈ 0.0164, above default minimum 0.008
+        assertThat(result.items.first().similarity).isGreaterThan(0.008)
         assertThat(result.items.first().similarity).isLessThan(0.02)
     }
 
@@ -295,7 +324,7 @@ class SimilarServiceTest {
 
         assertThat(result.items).hasSize(1)
         assertThat(result.items.single().articleId).isEqualTo(41L)
-        assertThat(result.items.single().similarity).isGreaterThan(0.015)
+        assertThat(result.items.single().similarity).isGreaterThan(0.008)
     }
 
     private fun row(

@@ -60,11 +60,11 @@ class SimilarService(
             try {
                 articleSimilarityRepository.findByFullTextSearch(ftsQuery, props.ftsCandidateLimit)
             } catch (e: Exception) {
-                log.debug("FTS 검색 실패: error={}", e.message)
-                emptyList()
+                log.debug("FTS 검색 실패, 날짜순 fallback: error={}", e.message)
+                articleSimilarityRepository.findLexicalCandidates(props.ftsCandidateLimit)
             }
         } else {
-            emptyList()
+            articleSimilarityRepository.findLexicalCandidates(props.ftsCandidateLimit)
         }
 
         if (vectorCandidates.isEmpty() && lexicalCandidates.isEmpty()) {
