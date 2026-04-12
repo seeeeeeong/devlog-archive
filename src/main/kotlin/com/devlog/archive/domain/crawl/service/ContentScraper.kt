@@ -29,7 +29,7 @@ class ContentScraper {
 
             extractContent(doc)
         } catch (e: Exception) {
-            log.debug("본문 스크래핑 실패: url={}, error={}", url, e.message)
+            log.warn("본문 스크래핑 실패: url={}, error={}", url, e.message)
             null
         }
     }

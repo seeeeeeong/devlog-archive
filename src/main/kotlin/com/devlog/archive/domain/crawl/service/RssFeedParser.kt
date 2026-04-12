@@ -41,14 +41,18 @@ class RssFeedParser {
 
     private fun fetchContent(rssUrl: String): String {
         val conn = URL(rssUrl).openConnection() as HttpURLConnection
-        conn.setRequestProperty(
-            "User-Agent",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        conn.setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml, */*")
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 10_000
-        return conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+        try {
+            conn.setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            conn.setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml, */*")
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            return conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+        } finally {
+            conn.disconnect()
+        }
     }
 
     // XML 1.0에서 허용되지 않는 제어문자 제거 (쿠팡 Medium 피드 대응)

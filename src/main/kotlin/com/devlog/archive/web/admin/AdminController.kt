@@ -51,7 +51,7 @@ class AdminController(
         @RequestHeader("X-Admin-Key", required = false) key: String?,
     ): ResponseEntity<Any> {
         if (key != admin.apiKey) return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
-        val articles = articleRepository.findAll(PageRequest.of(0, 20))
+        val articles = articleRepository.findAllWithBlog(PageRequest.of(0, 20))
         return ResponseEntity.ok(mapOf(
             "total" to articles.totalElements,
             "items" to articles.content.map {

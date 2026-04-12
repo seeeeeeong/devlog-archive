@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.cache.CacheManager
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 @Service
 class CrawlService(
@@ -22,13 +22,19 @@ class CrawlService(
     private val cacheManager: CacheManager,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val crawling = AtomicBoolean(false)
+    private val crawlStartedAt = AtomicLong(0)
 
     @Async
     fun crawlAllAsync() = crawlAll()
 
     fun crawlAll() {
-        if (!crawling.compareAndSet(false, true)) {
+        val now = System.currentTimeMillis()
+        val started = crawlStartedAt.get()
+        if (started != 0L && now - started < CRAWL_TIMEOUT_MS) {
+            log.warn("크롤링이 이미 실행 중입니다. 건너뜀.")
+            return
+        }
+        if (!crawlStartedAt.compareAndSet(started, now)) {
             log.warn("크롤링이 이미 실행 중입니다. 건너뜀.")
             return
         }
@@ -45,8 +51,12 @@ class CrawlService(
             cacheManager.getCache("similar")?.clear()
             log.info("크롤링 완료 후 similar 캐시 초기화")
         } finally {
-            crawling.set(false)
+            crawlStartedAt.set(0)
         }
+    }
+
+    companion object {
+        private const val CRAWL_TIMEOUT_MS = 30 * 60 * 1000L // 30분
     }
 
     fun crawlBlog(blog: BlogEntity) {
@@ -71,7 +81,7 @@ class CrawlService(
                     val vector = embeddingClient.embed(text)
                     articleEmbeddingRepository.upsert(article.id, vector)
                 } catch (e: Exception) {
-                    log.warn("임베딩 저장 실패: articleId={}, error={}", article.id, e.message)
+                    log.warn("임베딩 저장 실패: articleId={}", article.id, e)
                 }
             }
         } catch (e: Exception) {
