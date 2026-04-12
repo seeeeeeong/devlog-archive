@@ -20,10 +20,12 @@ spring:
     caffeine:
       spec: maximumSize=500,expireAfterWrite=3600s
 
-openai:
-  api-key: ${OPENAI_API_KEY}
-  embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
-  base-url: https://api.openai.com
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
 
 similar:
   rrf-k: 60

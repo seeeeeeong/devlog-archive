@@ -17,6 +17,7 @@ version = "0.0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    maven { url = uri("https://repo.spring.io/milestone") }
 }
 
 extensions.configure<JavaPluginExtension> {
@@ -31,9 +32,18 @@ allOpen {
     annotation("jakarta.persistence.Embeddable")
 }
 
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.ai:spring-ai-bom:1.0.0-M6")
+    }
+}
+
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+
+    // Spring AI
+    implementation("org.springframework.ai:spring-ai-openai-spring-boot-starter")
 
     // Web
     implementation("org.springframework.boot:spring-boot-starter-web")

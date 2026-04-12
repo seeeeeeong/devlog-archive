@@ -1,7 +1,6 @@
 package com.devlog.archive.domain.similar.service
 
 import com.devlog.archive.domain.article.repository.ArticleSimilarityRepository
-import com.devlog.archive.domain.article.service.ArticleTopicHintExtractor
 import com.devlog.archive.domain.article.repository.LexicalArticleRow
 import com.devlog.archive.domain.article.repository.SimilarArticleRow
 import com.devlog.archive.domain.blog.service.BlogCacheService
@@ -116,7 +115,6 @@ class SimilarServiceTest {
                     row(id = 3L, blogId = 3L, title = "Kafka Consumer Retry", summary = "dead letter queue", similarity = 0.58),
                 )
             )
-        // Only article 2 appears in FTS — it should get boosted above article 1 (vector-only)
         `when`(articleSimilarityRepository.findByFullTextSearch(anyString(), anyInt()))
             .thenReturn(
                 listOf(
@@ -134,9 +132,7 @@ class SimilarServiceTest {
         val result = similarService.findSimilar(request)
 
         assertThat(result).isNotEmpty
-        // Article 2 appears in both lists: vector rank 2 + FTS rank 1 → highest combined RRF
         assertThat(result.first().articleId).isEqualTo(2L)
-        // Article 3 only in vector at rank 3, should have lowest RRF score
         val article3 = result.find { it.articleId == 3L }
         if (article3 != null) {
             assertThat(article3.similarity).isLessThan(result.first().similarity)
@@ -151,7 +147,6 @@ class SimilarServiceTest {
             topK = 2,
         )
 
-        // Use high minimumRrfScore so single-source rank-1 candidate (1/61 ≈ 0.0164) is filtered
         val strictProps = SimilarProperties(minimumRrfScore = 0.02)
         val strictService = SimilarService(
             articleSimilarityRepository,
@@ -174,7 +169,6 @@ class SimilarServiceTest {
 
         val result = strictService.findSimilar(request)
 
-        // 1/(60+1) = 0.0164 which is below 0.02 threshold
         assertThat(result).isEmpty()
     }
 
@@ -186,8 +180,6 @@ class SimilarServiceTest {
             topK = 10,
         )
 
-        // 10 candidates from vector only — with default threshold 0.008,
-        // rank 10 gives 1/(60+10) = 0.0143, well above cutoff
         val candidates = (1L..10L).map { i ->
             row(id = i, blogId = i, title = "Redis Article $i", summary = "redis content $i", similarity = 0.80 - i * 0.02)
         }
@@ -202,7 +194,6 @@ class SimilarServiceTest {
 
         val result = similarService.findSimilar(request)
 
-        // All 10 should pass: rank 10 → 1/(60+10)=0.0143 > 0.008
         assertThat(result).hasSize(10)
     }
 
@@ -295,7 +286,6 @@ class SimilarServiceTest {
         val result = similarService.findSimilar(request)
 
         assertThat(result).hasSize(1)
-        // score = 1/(60+1) ≈ 0.0164, above default minimum 0.008
         assertThat(result.first().similarity).isGreaterThan(0.008)
         assertThat(result.first().similarity).isLessThan(0.02)
     }
@@ -305,7 +295,6 @@ class SimilarServiceTest {
         val request = SimilarQuery(
             title = "Outbox Pattern Kafka",
             content = "reliable event delivery",
-            topicHints = listOf("Outbox", "Kafka"),
             topK = 2,
         )
 
@@ -334,14 +323,12 @@ class SimilarServiceTest {
         title: String,
         summary: String?,
         similarity: Double,
-        topicHints: List<String> = emptyList(),
     ): SimilarArticleRow = TestSimilarArticleRow(
         id = id,
         blogId = blogId,
         title = title,
         url = "https://example.com/$id",
         summary = summary,
-        topicHints = ArticleTopicHintExtractor.toStorageValue(topicHints),
         publishedAt = LocalDateTime.of(2026, 3, 18, 10, 0),
         similarity = similarity,
     )
@@ -359,14 +346,12 @@ class SimilarServiceTest {
         blogId: Long,
         title: String,
         summary: String?,
-        topicHints: List<String> = emptyList(),
     ): LexicalArticleRow = TestLexicalArticleRow(
         id = id,
         blogId = blogId,
         title = title,
         url = "https://example.com/$id",
         summary = summary,
-        topicHints = ArticleTopicHintExtractor.toStorageValue(topicHints),
         publishedAt = LocalDateTime.of(2026, 3, 18, 10, 0),
     )
 }
@@ -376,7 +361,6 @@ private data class TestSimilarArticleRow(
     override val title: String,
     override val url: String,
     override val summary: String?,
-    override val topicHints: String?,
     override val publishedAt: LocalDateTime?,
     override val similarity: Double,
     override val blogId: Long,
@@ -387,7 +371,6 @@ private data class TestLexicalArticleRow(
     override val title: String,
     override val url: String,
     override val summary: String?,
-    override val topicHints: String?,
     override val publishedAt: LocalDateTime?,
     override val blogId: Long,
 ) : LexicalArticleRow

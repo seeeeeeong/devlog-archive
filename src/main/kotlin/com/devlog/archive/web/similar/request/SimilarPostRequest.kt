@@ -15,16 +15,12 @@ data class SimilarPostRequest(
     @field:Size(max = 4000)
     val content: String,
 
-    @field:Size(max = 10)
-    val topicHints: List<@Size(max = 60) String> = emptyList(),
-
     @field:Min(1) @field:Max(10)
     val topK: Int = 5,
 ) {
     fun toQuery(): SimilarQuery = SimilarQuery(
         title = title,
         content = content,
-        topicHints = topicHints,
         topK = topK,
     )
 }

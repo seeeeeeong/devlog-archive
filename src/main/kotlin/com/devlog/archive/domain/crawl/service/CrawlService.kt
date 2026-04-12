@@ -1,7 +1,7 @@
 package com.devlog.archive.domain.crawl.service
 
 import com.devlog.archive.domain.article.repository.ArticleEmbeddingRepository
-import com.devlog.archive.domain.article.service.ArticleTopicHintExtractor
+import com.devlog.archive.domain.article.service.buildEmbeddingText
 import com.devlog.archive.domain.blog.entity.BlogEntity
 import com.devlog.archive.domain.blog.repository.BlogRepository
 import com.devlog.archive.domain.embedding.client.EmbeddingClient
@@ -67,11 +67,7 @@ class CrawlService(
                 newCount++
 
                 try {
-                    val text = ArticleTopicHintExtractor.buildEmbeddingText(
-                        title = article.title,
-                        summary = article.summary,
-                        topicHints = ArticleTopicHintExtractor.fromStorageValue(article.topicHints),
-                    )
+                    val text = buildEmbeddingText(article.title, article.summary)
                     val vector = embeddingClient.embed(text)
                     articleEmbeddingRepository.upsert(article.id, vector)
                 } catch (e: Exception) {

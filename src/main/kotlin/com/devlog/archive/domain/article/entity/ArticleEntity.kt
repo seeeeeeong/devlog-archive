@@ -21,9 +21,6 @@ class ArticleEntity(
     @Column(columnDefinition = "TEXT")
     val summary: String?,
 
-    @Column(name = "topic_hints", columnDefinition = "TEXT")
-    val topicHints: String? = null,
-
     val publishedAt: LocalDateTime?,
     val crawledAt: LocalDateTime = LocalDateTime.now(),
 )

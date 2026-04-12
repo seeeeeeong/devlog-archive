@@ -2,7 +2,7 @@ package com.devlog.archive.domain.crawl.scheduler
 
 import com.devlog.archive.domain.article.repository.ArticleEmbeddingRepository
 import com.devlog.archive.domain.article.repository.ArticleRepository
-import com.devlog.archive.domain.article.service.ArticleTopicHintExtractor
+import com.devlog.archive.domain.article.service.buildEmbeddingText
 import com.devlog.archive.domain.embedding.client.EmbeddingClient
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -16,7 +16,7 @@ class EmbeddingRetryScheduler(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)  // 시작 1분 후, 이후 1시간마다
+    @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
     fun retryMissingEmbeddings() {
         val articles = articleRepository.findArticlesWithoutEmbedding(50)
         if (articles.isEmpty()) return
@@ -26,9 +26,7 @@ class EmbeddingRetryScheduler(
 
         articles.forEach { article ->
             try {
-                val topicHints = ArticleTopicHintExtractor.fromStorageValue(article.topicHints)
-                    .ifEmpty { ArticleTopicHintExtractor.extract(article.title, article.summary) }
-                val text = ArticleTopicHintExtractor.buildEmbeddingText(article.title, article.summary, topicHints)
+                val text = buildEmbeddingText(article.title, article.summary)
                 val vector = embeddingClient.embed(text)
                 articleEmbeddingRepository.save(article.id, vector)
                 successCount++

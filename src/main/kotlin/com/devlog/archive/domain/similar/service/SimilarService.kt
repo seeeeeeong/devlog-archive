@@ -1,7 +1,6 @@
 package com.devlog.archive.domain.similar.service
 
 import com.devlog.archive.domain.article.repository.ArticleSimilarityRepository
-import com.devlog.archive.domain.article.service.ArticleTopicHintExtractor
 import com.devlog.archive.domain.article.repository.CandidateArticleRow
 import com.devlog.archive.domain.article.repository.LexicalArticleRow
 import com.devlog.archive.domain.article.repository.SimilarArticleRow
@@ -33,13 +32,12 @@ class SimilarService(
 
     @Cacheable(
         cacheNames = ["similar"],
-        key = "#root.target.cacheKey(#query.title, #query.content, #query.topicHints, #query.topK)",
+        key = "#root.target.cacheKey(#query.title, #query.content, #query.topK)",
     )
     fun findSimilar(query: SimilarQuery): List<SimilarMatch> {
         log.debug("유사글 검색: title={}", query.title)
 
-        val normalizedTopicHints = normalizeTopicHints(query.topicHints, query.title, query.content)
-        val queryText = buildQueryText(query, normalizedTopicHints)
+        val queryText = buildQueryText(query)
         val embedding = try {
             embeddingClient.embed(queryText)
         } catch (e: RestClientException) {
@@ -57,7 +55,7 @@ class SimilarService(
             emptyList()
         }
 
-        val ftsQuery = buildFtsQuery(query.title, normalizedTopicHints)
+        val ftsQuery = buildFtsQuery(query.title)
         val lexicalCandidates = if (ftsQuery.isNotBlank()) {
             try {
                 articleSimilarityRepository.findByFullTextSearch(ftsQuery, props.ftsCandidateLimit)
@@ -119,9 +117,8 @@ class SimilarService(
             lexicalCount = lexicalCandidates.size,
         )
         log.info(
-            "유사글 결과: title={}, topics={}, stage={}, vectorCandidates={}, lexicalCandidates={}, topVector={}, resultCount={}",
+            "유사글 결과: title={}, stage={}, vectorCandidates={}, lexicalCandidates={}, topVector={}, resultCount={}",
             query.title,
-            normalizedTopicHints,
             stage,
             vectorCandidates.size,
             lexicalCandidates.size,
@@ -132,8 +129,8 @@ class SimilarService(
         return result
     }
 
-    fun cacheKey(title: String, content: String, topicHints: List<String>, topK: Int): String {
-        val input = "$title::${content.take(2500)}::${normalizeTopicHints(topicHints, title, content).joinToString("|")}::$topK"
+    fun cacheKey(title: String, content: String, topK: Int): String {
+        val input = "$title::${content.take(2500)}::$topK"
         return MessageDigest.getInstance("SHA-256")
             .digest(input.toByteArray())
             .joinToString("") { "%02x".format(it) }
@@ -167,13 +164,10 @@ class SimilarService(
         }.sortedByDescending { it.score }
     }
 
-    private fun buildQueryText(query: SimilarQuery, topicHints: List<String>): String {
+    private fun buildQueryText(query: SimilarQuery): String {
         return buildList {
             add(query.title)
             add(query.title)
-            if (topicHints.isNotEmpty()) {
-                add(topicHints.joinToString(" "))
-            }
             add(cleanForEmbedding(query.content).take(2500))
         }.joinToString(" ").trim()
     }
@@ -190,25 +184,9 @@ class SimilarService(
             .trim()
     }
 
-    private fun buildFtsQuery(title: String, topicHints: List<String>): String {
-        val tokens = buildSet {
-            addAll(extractKeywords(title, 6))
-            topicHints.forEach { addAll(extractKeywords(it, 4)) }
-        }
-        return tokens.take(10).joinToString(" | ")
-    }
-
-    private fun normalizeTopicHints(topicHints: List<String>, title: String = "", content: String = ""): List<String> {
-        val provided = topicHints.asSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .take(8)
-            .toList()
-
-        if (provided.isNotEmpty()) return provided
-
-        return ArticleTopicHintExtractor.extract(title, content.take(2500))
+    private fun buildFtsQuery(title: String): String {
+        val tokens = extractKeywords(title, 10)
+        return tokens.joinToString(" | ")
     }
 
     private fun extractKeywords(text: String, limit: Int): Set<String> {
@@ -248,7 +226,6 @@ private data class SearchCandidate(
     val title: String,
     val url: String,
     val summary: String?,
-    val topicHints: List<String>,
     val publishedAt: java.time.LocalDateTime?,
     val blogId: Long,
     val vectorSimilarity: Double?,
@@ -260,7 +237,6 @@ private data class SearchCandidate(
                 title = row.title,
                 url = row.url,
                 summary = row.summary,
-                topicHints = ArticleTopicHintExtractor.fromStorageValue(row.topicHints),
                 publishedAt = row.publishedAt,
                 blogId = row.blogId,
                 vectorSimilarity = vectorSimilarity,

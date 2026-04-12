@@ -2,7 +2,6 @@ package com.devlog.archive.domain.crawl.service
 
 import com.devlog.archive.domain.article.entity.ArticleEntity
 import com.devlog.archive.domain.article.repository.ArticleRepository
-import com.devlog.archive.domain.article.service.ArticleTopicHintExtractor
 import com.devlog.archive.domain.blog.entity.BlogEntity
 import com.devlog.archive.domain.crawl.log.entity.CrawlLogEntity
 import com.devlog.archive.domain.crawl.log.repository.CrawlLogRepository
@@ -24,9 +23,6 @@ class ArticleStoreService(
     fun saveArticleIfNew(blog: BlogEntity, parsed: ParsedArticle): ArticleEntity? {
         val urlHash = sha256(parsed.url)
         if (articleRepository.existsByUrlHash(urlHash)) return null
-        val topicHints = ArticleTopicHintExtractor.toStorageValue(
-            ArticleTopicHintExtractor.extract(parsed.title, parsed.summary)
-        )
         return articleRepository.save(
             ArticleEntity(
                 blog = blog,
@@ -34,7 +30,6 @@ class ArticleStoreService(
                 url = parsed.url,
                 urlHash = urlHash,
                 summary = parsed.summary,
-                topicHints = topicHints,
                 publishedAt = parsed.publishedAt,
             )
         )
