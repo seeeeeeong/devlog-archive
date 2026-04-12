@@ -66,10 +66,6 @@ dependencies {
     // HTML Scraping
     implementation("org.jsoup:jsoup:1.18.3")
 
-    // Retry
-    implementation("org.springframework.retry:spring-retry")
-    implementation("org.springframework.boot:spring-boot-starter-aop")
-
     // Prometheus
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
